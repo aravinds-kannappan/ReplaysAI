@@ -1,0 +1,249 @@
+import React, { useState, useEffect } from 'react';
+import { ArrowRight, Play, BarChart3, Zap, Users, Trophy, Menu, X } from 'lucide-react';
+
+const Landing = () => {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState('home');
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => setScrolled(window.scrollY > 50);
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const blogPosts = [
+    {
+      id: 1,
+      title: "How AI is Revolutionizing Coach Strategy Analysis",
+      excerpt: "Discover how machine learning transforms game footage into actionable coaching insights in seconds.",
+      date: "Feb 2, 2026",
+      author: "Sarah Chen",
+      category: "AI & Sports"
+    },
+    {
+      id: 2,
+      title: "The Future of Sports Broadcasting: Personalized Highlights",
+      excerpt: "Why one-size-fits-all highlights are dead. Learn how AI tailors content to every fan.",
+      date: "Jan 28, 2026",
+      author: "Marcus Rodriguez",
+      category: "Technology"
+    },
+    {
+      id: 3,
+      title: "Injury Prediction: Using Bayesian Models to Keep Players Healthy",
+      excerpt: "Deep dive into our statistical modeling engine and how it predicts injuries before they happen.",
+      date: "Jan 20, 2026",
+      author: "Dr. Elena Vasquez",
+      category: "Analytics"
+    },
+    {
+      id: 4,
+      title: "From Game Film to Winning Moments: Our Player Highlights Algorithm",
+      excerpt: "See how we identify the most impactful plays in real-time and deliver them instantly.",
+      date: "Jan 15, 2026",
+      author: "James Park",
+      category: "Engineering"
+    }
+  ];
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white overflow-hidden">
+      {/* Animated background elements */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-blue-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse"></div>
+        <div className="absolute bottom-0 left-1/3 w-96 h-96 bg-purple-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse" style={{ animationDelay: '2s' }}></div>
+        <div className="absolute top-1/2 left-0 w-72 h-72 bg-cyan-600 rounded-full mix-blend-multiply filter blur-3xl opacity-15 animate-pulse" style={{ animationDelay: '4s' }}></div>
+      </div>
+
+      {/* Navigation */}
+      <nav className={`fixed w-full z-50 transition-all duration-300 ${scrolled ? 'bg-slate-950/95 backdrop-blur-lg shadow-2xl' : 'bg-transparent'}`}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+          <div className="flex items-center gap-2 text-2xl font-black bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
+            <Play className="w-7 h-7 text-cyan-400" fill="currentColor" />
+            Replays AI
+          </div>
+          
+          <div className="hidden md:flex gap-8 items-center">
+            {['Product', 'Blog', 'Enterprise', 'Contact'].map(item => (
+              <button key={item} className="text-sm font-medium hover:text-cyan-400 transition duration-200">
+                {item}
+              </button>
+            ))}
+            <button className="px-6 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold rounded-lg transition duration-200 shadow-lg">
+              Get Started
+            </button>
+          </div>
+
+          <button className="md:hidden" onClick={() => setMenuOpen(!menuOpen)}>
+            {menuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+          </button>
+        </div>
+
+        {menuOpen && (
+          <div className="md:hidden bg-slate-950/95 backdrop-blur-lg border-t border-slate-800">
+            <div className="flex flex-col gap-4 p-4">
+              {['Product', 'Blog', 'Enterprise', 'Contact'].map(item => (
+                <button key={item} className="text-left font-medium hover:text-cyan-400">
+                  {item}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </nav>
+
+      {/* Hero Section */}
+      <section className="relative pt-32 pb-20 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center space-y-8 animate-fade-in">
+            <div className="inline-block">
+              <span className="px-4 py-2 bg-cyan-500/10 border border-cyan-500/30 rounded-full text-cyan-300 text-sm font-semibold">
+                ✨ AI-Powered Sports Intelligence
+              </span>
+            </div>
+
+            <h1 className="text-5xl sm:text-7xl font-black leading-tight">
+              Turn Every <span className="bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 bg-clip-text text-transparent">Play into Gold</span>
+            </h1>
+
+            <p className="text-xl text-slate-300 max-w-2xl mx-auto leading-relaxed">
+              Instant post-game highlights, AI-driven strategy analysis, and injury prediction. Built for coaches, broadcasters, and fans who demand more.
+            </p>
+
+            <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
+              <button className="px-8 py-4 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold rounded-xl transition duration-300 flex items-center justify-center gap-2 shadow-2xl">
+                Watch Demo <ArrowRight className="w-5 h-5" />
+              </button>
+              <button className="px-8 py-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 font-bold rounded-xl transition duration-300">
+                Schedule Call
+              </button>
+            </div>
+
+            {/* Floating card with stats */}
+            <div className="mt-16 grid grid-cols-3 gap-6 max-w-2xl mx-auto pt-12 border-t border-slate-800">
+              <div className="text-center">
+                <div className="text-3xl font-black bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">100+</div>
+                <div className="text-sm text-slate-400 mt-1">Teams Analyzing</div>
+              </div>
+              <div className="text-center">
+                <div className="text-3xl font-black bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent">1s</div>
+                <div className="text-sm text-slate-400 mt-1">Commentary Latency</div>
+              </div>
+              <div className="text-center">
+                <div className="text-3xl font-black bg-gradient-to-r from-purple-600 to-pink-500 bg-clip-text text-transparent">2M+</div>
+                <div className="text-sm text-slate-400 mt-1">Fans Engaged</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Features Section */}
+      <section className="py-20 px-4 sm:px-6 lg:px-8 border-t border-slate-800">
+        <div className="max-w-6xl mx-auto">
+          <h2 className="text-4xl font-black text-center mb-16">Engineered for Champions</h2>
+          
+          <div className="grid md:grid-cols-3 gap-8">
+            {[
+              { icon: Zap, title: "Instant Highlights", desc: "AI-generated post-game reels in seconds, not hours" },
+              { icon: BarChart3, title: "Strategy Insights", desc: "Bayesian models reveal patterns coaches never see" },
+              { icon: Trophy, title: "Injury Prediction", desc: "Prevent injuries before they happen with ML" },
+              { icon: Users, title: "Fan Personalization", desc: "Highlight reels tailored to each viewer's interests" },
+              { icon: Play, title: "Real-time Commentary", desc: "AI-powered insights at 1 second latency" },
+              { icon: ArrowRight, title: "Enterprise Ready", desc: "Proven pilots with NBA and college programs" }
+            ].map((feature, i) => (
+              <div key={i} className="p-6 bg-slate-800/50 backdrop-blur border border-slate-700 rounded-xl hover:border-cyan-500/50 transition duration-300 group">
+                <feature.icon className="w-10 h-10 text-cyan-400 mb-4 group-hover:scale-110 transition duration-300" />
+                <h3 className="text-lg font-bold mb-2">{feature.title}</h3>
+                <p className="text-slate-400 text-sm">{feature.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Blog Section */}
+      <section className="py-20 px-4 sm:px-6 lg:px-8 border-t border-slate-800">
+        <div className="max-w-6xl mx-auto">
+          <div className="flex justify-between items-center mb-12">
+            <h2 className="text-4xl font-black">Latest Insights</h2>
+            <button className="text-cyan-400 hover:text-cyan-300 font-bold flex items-center gap-2">
+              View All <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-8">
+            {blogPosts.map((post, i) => (
+              <article key={post.id} className="group bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur border border-slate-700 rounded-xl p-8 hover:border-cyan-500/50 transition duration-300 cursor-pointer">
+                <div className="flex items-center gap-3 mb-4">
+                  <span className="px-3 py-1 bg-cyan-500/20 text-cyan-300 text-xs font-bold rounded-full">
+                    {post.category}
+                  </span>
+                  <span className="text-xs text-slate-400">{post.date}</span>
+                </div>
+                <h3 className="text-xl font-bold mb-3 group-hover:text-cyan-400 transition duration-200">
+                  {post.title}
+                </h3>
+                <p className="text-slate-400 text-sm mb-4">{post.excerpt}</p>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-slate-500">By {post.author}</span>
+                  <ArrowRight className="w-4 h-4 text-cyan-400 opacity-0 group-hover:opacity-100 transform group-hover:translate-x-1 transition duration-300" />
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* CTA Section */}
+      <section className="py-20 px-4 sm:px-6 lg:px-8 border-t border-slate-800">
+        <div className="max-w-4xl mx-auto text-center space-y-8 bg-gradient-to-r from-cyan-500/10 via-blue-500/10 to-purple-600/10 border border-cyan-500/20 rounded-2xl p-12">
+          <h2 className="text-4xl font-black">Ready to Transform Your Game?</h2>
+          <p className="text-lg text-slate-300">Join 100+ teams already using Replays AI to dominate their sport.</p>
+          <button className="px-10 py-4 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold rounded-xl transition duration-300 shadow-2xl">
+            Schedule Demo with Our Team
+          </button>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="border-t border-slate-800 py-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-6xl mx-auto">
+          <div className="grid md:grid-cols-4 gap-8 mb-8">
+            <div>
+              <div className="flex items-center gap-2 text-lg font-black mb-4">
+                <Play className="w-5 h-5 text-cyan-400" fill="currentColor" />
+                Replays AI
+              </div>
+              <p className="text-slate-400 text-sm">AI-powered post-game intelligence for teams & broadcasters.</p>
+            </div>
+            {[
+              { title: 'Product', links: ['Features', 'Pricing', 'Security'] },
+              { title: 'Company', links: ['About', 'Blog', 'Careers'] },
+              { title: 'Legal', links: ['Privacy', 'Terms', 'Contact'] }
+            ].map((col, i) => (
+              <div key={i}>
+                <h4 className="font-bold mb-4">{col.title}</h4>
+                <ul className="space-y-2">
+                  {col.links.map(link => (
+                    <li key={link}>
+                      <a href="#" className="text-slate-400 hover:text-cyan-400 text-sm transition">
+                        {link}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+          <div className="border-t border-slate-800 pt-8 text-center text-slate-500 text-sm">
+            © 2026 Replays AI. All rights reserved. | Built for the future of sports.
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+};
+
+export default Landing;
