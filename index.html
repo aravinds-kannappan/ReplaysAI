@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Replays AI - AI-Powered Sports Intelligence</title>
+    <title>Replays AI - VR Post-Game Experience</title>
     <style>
         * {
             margin: 0;
@@ -12,13 +12,14 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #0f172a 0%, #0e1425 50%, #0f172a 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0a0e27;
             color: white;
             overflow-x: hidden;
+            line-height: 1.6;
         }
 
-        /* Background animations */
+        /* Animated background */
         .bg-orbs {
             position: fixed;
             inset: 0;
@@ -32,40 +33,16 @@
             border-radius: 50%;
             mix-blend-mode: multiply;
             filter: blur(80px);
-            opacity: 0.2;
-            animation: float 8s ease-in-out infinite;
+            opacity: 0.15;
         }
 
-        .orb1 {
-            top: 0;
-            right: 0;
-            width: 400px;
-            height: 400px;
-            background: #0ea5e9;
-            animation-delay: 0s;
-        }
-
-        .orb2 {
-            bottom: 0;
-            left: 33%;
-            width: 400px;
-            height: 400px;
-            background: #a855f7;
-            animation-delay: 2s;
-        }
-
-        .orb3 {
-            top: 50%;
-            left: 0;
-            width: 300px;
-            height: 300px;
-            background: #06b6d4;
-            animation-delay: 4s;
-        }
+        .orb1 { top: -20%; right: -10%; width: 500px; height: 500px; background: #0ea5e9; animation: float 20s ease-in-out infinite; }
+        .orb2 { bottom: -10%; left: 10%; width: 400px; height: 400px; background: #a855f7; animation: float 25s ease-in-out infinite 2s; }
+        .orb3 { top: 30%; left: -5%; width: 300px; height: 300px; background: #06b6d4; animation: float 22s ease-in-out infinite 4s; }
 
         @keyframes float {
-            0%, 100% { transform: translate(0, 0); }
-            50% { transform: translate(30px, -30px); }
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            50% { transform: translate(40px, -40px) scale(1.1); }
         }
 
         /* Navigation */
@@ -73,14 +50,14 @@
             position: fixed;
             width: 100%;
             z-index: 50;
-            padding: 1rem 2rem;
+            padding: 1.5rem 2rem;
             transition: all 0.3s ease;
-            backdrop-filter: blur(10px);
+            backdrop-filter: blur(12px);
         }
 
         nav.scrolled {
-            background: rgba(15, 23, 42, 0.95);
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            background: rgba(10, 14, 39, 0.95);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
         }
 
         .nav-container {
@@ -94,10 +71,7 @@
         .logo {
             font-size: 1.5rem;
             font-weight: 900;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            background: linear-gradient(90deg, #06b6d4, #0ea5e9);
+            background: linear-gradient(90deg, #06b6d4, #0ea5e9, #a855f7);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
@@ -105,13 +79,13 @@
 
         .nav-links {
             display: flex;
-            gap: 2rem;
+            gap: 2.5rem;
             align-items: center;
             list-style: none;
         }
 
         .nav-links a {
-            color: white;
+            color: #e2e8f0;
             text-decoration: none;
             font-weight: 500;
             transition: color 0.2s;
@@ -123,26 +97,26 @@
 
         .cta-button {
             padding: 0.75rem 1.5rem;
-            background: #06b6d4;
-            color: #0f172a;
+            background: linear-gradient(90deg, #06b6d4, #0ea5e9);
+            color: white;
             border: none;
             border-radius: 0.5rem;
             font-weight: bold;
             cursor: pointer;
-            transition: background 0.2s;
+            transition: all 0.3s;
         }
 
         .cta-button:hover {
-            background: #0ea5e9;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(6, 182, 212, 0.4);
         }
 
-        /* Hero Section */
+        /* Hero */
         .hero {
             position: relative;
             z-index: 1;
             padding-top: 8rem;
             padding-bottom: 5rem;
-            text-align: center;
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -153,18 +127,25 @@
             max-width: 900px;
             margin: 0 auto;
             padding: 0 2rem;
+            text-align: center;
         }
 
         .badge {
             display: inline-block;
-            padding: 0.5rem 1rem;
-            background: rgba(6, 182, 212, 0.1);
-            border: 1px solid rgba(6, 182, 212, 0.3);
-            border-radius: 9999px;
+            padding: 0.75rem 1.5rem;
+            background: rgba(6, 182, 212, 0.15);
+            border: 1px solid rgba(6, 182, 212, 0.4);
+            border-radius: 50px;
             color: #67e8f9;
-            font-size: 0.875rem;
+            font-size: 0.9rem;
             font-weight: 600;
             margin-bottom: 2rem;
+            animation: pulse-border 3s ease-in-out infinite;
+        }
+
+        @keyframes pulse-border {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(6, 182, 212, 0.4); }
+            50% { box-shadow: 0 0 0 8px rgba(6, 182, 212, 0); }
         }
 
         .hero h1 {
@@ -172,6 +153,18 @@
             font-weight: 900;
             line-height: 1.2;
             margin-bottom: 1.5rem;
+            animation: slideUp 0.8s ease-out;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .gradient-text {
@@ -184,25 +177,26 @@
         .hero p {
             font-size: 1.25rem;
             color: #cbd5e1;
-            margin-bottom: 2rem;
-            line-height: 1.6;
+            margin-bottom: 2.5rem;
+            animation: slideUp 0.8s ease-out 0.1s both;
         }
 
         .button-group {
             display: flex;
-            gap: 1rem;
+            gap: 1.5rem;
             justify-content: center;
             flex-wrap: wrap;
             margin-bottom: 4rem;
+            animation: slideUp 0.8s ease-out 0.2s both;
         }
 
         .btn {
-            padding: 1rem 2rem;
+            padding: 1rem 2.5rem;
             border: none;
             border-radius: 0.75rem;
             font-weight: bold;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.3s;
             font-size: 1rem;
         }
 
@@ -213,36 +207,41 @@
         }
 
         .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 15px 40px rgba(6, 182, 212, 0.4);
+            transform: translateY(-3px);
+            box-shadow: 0 20px 50px rgba(6, 182, 212, 0.4);
         }
 
         .btn-secondary {
             background: #1e293b;
             color: white;
-            border: 1px solid #475569;
+            border: 2px solid #475569;
         }
 
         .btn-secondary:hover {
-            background: #334155;
+            border-color: #06b6d4;
+            color: #06b6d4;
         }
 
         .stats {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
             gap: 2rem;
             padding-top: 3rem;
             border-top: 1px solid rgba(148, 163, 184, 0.1);
-            max-width: 600px;
+            max-width: 700px;
             margin: 0 auto;
         }
 
         .stat {
             text-align: center;
+            animation: slideUp 0.8s ease-out both;
         }
 
+        .stat:nth-child(2) { animation-delay: 0.1s; }
+        .stat:nth-child(3) { animation-delay: 0.2s; }
+
         .stat-value {
-            font-size: 2rem;
+            font-size: 2.5rem;
             font-weight: 900;
             background: linear-gradient(90deg, #06b6d4, #0ea5e9, #a855f7);
             -webkit-background-clip: text;
@@ -251,13 +250,13 @@
         }
 
         .stat-label {
-            font-size: 0.875rem;
+            font-size: 0.9rem;
             color: #94a3b8;
             margin-top: 0.5rem;
         }
 
-        /* Features Section */
-        .features {
+        /* Interactive Demo Section */
+        .demo-section {
             position: relative;
             z-index: 1;
             padding: 5rem 2rem;
@@ -265,71 +264,205 @@
         }
 
         .section-title {
-            font-size: 2.25rem;
+            font-size: 2.5rem;
             font-weight: 900;
             text-align: center;
             margin-bottom: 4rem;
         }
 
-        .features-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 2rem;
-            max-width: 1400px;
+        .demo-container {
+            max-width: 1200px;
             margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 3rem;
+            align-items: center;
         }
 
-        .feature-card {
-            padding: 1.5rem;
-            background: rgba(30, 41, 59, 0.5);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(71, 85, 105, 0.3);
-            border-radius: 0.75rem;
+        .demo-video {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 16/9;
+            background: linear-gradient(135deg, rgba(6, 182, 212, 0.1), rgba(168, 85, 247, 0.1));
+            border: 2px solid rgba(6, 182, 212, 0.3);
+            border-radius: 1rem;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
             transition: all 0.3s;
         }
 
-        .feature-card:hover {
-            border-color: rgba(6, 182, 212, 0.5);
-            transform: translateY(-5px);
+        .demo-video:hover {
+            border-color: rgba(6, 182, 212, 0.6);
+            box-shadow: 0 0 40px rgba(6, 182, 212, 0.2);
         }
 
-        .feature-icon {
-            width: 2.5rem;
-            height: 2.5rem;
-            margin-bottom: 1rem;
+        .play-button {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(90deg, #06b6d4, #0ea5e9);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: pulse 2s ease-in-out infinite;
         }
 
-        .feature-card h3 {
-            font-size: 1.125rem;
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        .play-button::after {
+            content: '';
+            width: 0;
+            height: 0;
+            border-left: 25px solid white;
+            border-top: 15px solid transparent;
+            border-bottom: 15px solid transparent;
+            margin-left: 5px;
+        }
+
+        .demo-content h3 {
+            font-size: 2rem;
+            margin-bottom: 1.5rem;
+            line-height: 1.3;
+        }
+
+        .demo-content p {
+            color: #cbd5e1;
+            margin-bottom: 1.5rem;
+            font-size: 1.05rem;
+        }
+
+        .feature-list {
+            list-style: none;
+            margin: 2rem 0;
+        }
+
+        .feature-list li {
+            padding: 1rem 0;
+            color: #e2e8f0;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+        }
+
+        .feature-list li::before {
+            content: '✓';
             font-weight: bold;
-            margin-bottom: 0.5rem;
+            color: #06b6d4;
+            font-size: 1.3rem;
+            min-width: 24px;
         }
 
-        .feature-card p {
-            color: #94a3b8;
-            font-size: 0.875rem;
-            line-height: 1.6;
-        }
-
-        /* Blog Section */
-        .blog {
+        /* Features Grid - Dynamic Cards */
+        .features-section {
             position: relative;
             z-index: 1;
             padding: 5rem 2rem;
             border-top: 1px solid rgba(148, 163, 184, 0.1);
         }
 
-        .blog-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 4rem;
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 2rem;
             max-width: 1400px;
-            margin-left: auto;
-            margin-right: auto;
+            margin: 0 auto;
         }
 
-        .blog-grid {
+        .feature-card {
+            padding: 2rem;
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.4), rgba(15, 23, 42, 0.4));
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(71, 85, 105, 0.3);
+            border-radius: 1rem;
+            transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+            position: relative;
+            overflow: hidden;
+            cursor: pointer;
+        }
+
+        .feature-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(6, 182, 212, 0.1), rgba(168, 85, 247, 0.1));
+            opacity: 0;
+            transition: opacity 0.4s;
+        }
+
+        .feature-card:hover {
+            border-color: rgba(6, 182, 212, 0.6);
+            transform: translateY(-10px);
+            box-shadow: 0 20px 50px rgba(6, 182, 212, 0.15);
+        }
+
+        .feature-card:hover::before {
+            opacity: 1;
+        }
+
+        .feature-content {
+            position: relative;
+            z-index: 1;
+        }
+
+        .feature-icon {
+            width: 3rem;
+            height: 3rem;
+            margin-bottom: 1rem;
+            color: #06b6d4;
+        }
+
+        .feature-card h3 {
+            font-size: 1.3rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+
+        .feature-card p {
+            color: #cbd5e1;
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+
+        /* Dual Market Section */
+        .market-section {
+            position: relative;
+            z-index: 1;
+            padding: 5rem 2rem;
+            border-top: 1px solid rgba(148, 163, 184, 0.1);
+        }
+
+        .market-toggle {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-bottom: 3rem;
+        }
+
+        .toggle-btn {
+            padding: 0.75rem 2rem;
+            border: 2px solid rgba(6, 182, 212, 0.3);
+            background: transparent;
+            color: #cbd5e1;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .toggle-btn.active {
+            background: linear-gradient(90deg, #06b6d4, #0ea5e9);
+            border-color: transparent;
+            color: white;
+        }
+
+        .market-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
             gap: 2rem;
@@ -337,56 +470,73 @@
             margin: 0 auto;
         }
 
-        .blog-card {
-            padding: 2rem;
+        .market-card {
+            padding: 2.5rem;
             background: linear-gradient(135deg, rgba(30, 41, 59, 0.5), rgba(15, 23, 42, 0.5));
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(71, 85, 105, 0.3);
-            border-radius: 0.75rem;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-
-        .blog-card:hover {
-            border-color: rgba(6, 182, 212, 0.5);
-            transform: translateY(-5px);
-        }
-
-        .blog-tag {
-            display: inline-block;
-            padding: 0.25rem 0.75rem;
-            background: rgba(6, 182, 212, 0.2);
-            color: #06b6d4;
-            font-size: 0.75rem;
-            font-weight: bold;
-            border-radius: 9999px;
-            margin-bottom: 1rem;
-        }
-
-        .blog-card h3 {
-            font-size: 1.25rem;
-            font-weight: bold;
-            margin-bottom: 0.75rem;
-            line-height: 1.4;
-        }
-
-        .blog-card p {
-            color: #94a3b8;
-            font-size: 0.875rem;
-            margin-bottom: 1rem;
-            line-height: 1.6;
-        }
-
-        .blog-footer {
+            border: 2px solid rgba(6, 182, 212, 0.2);
+            border-radius: 1rem;
+            min-height: 400px;
             display: flex;
+            flex-direction: column;
             justify-content: space-between;
-            align-items: center;
-            font-size: 0.75rem;
-            color: #64748b;
+            transition: all 0.4s ease;
+            opacity: 0;
+            animation: fadeInUp 0.6s ease-out forwards;
         }
 
-        /* CTA Section */
-        .cta {
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .market-card:nth-child(2) { animation-delay: 0.1s; }
+        .market-card:nth-child(3) { animation-delay: 0.2s; }
+
+        .market-card:hover {
+            border-color: rgba(6, 182, 212, 0.6);
+            transform: translateY(-8px);
+            box-shadow: 0 20px 50px rgba(6, 182, 212, 0.1);
+        }
+
+        .market-card h3 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: #06b6d4;
+        }
+
+        .market-card p {
+            color: #cbd5e1;
+            margin-bottom: 1.5rem;
+            font-size: 0.95rem;
+        }
+
+        .market-features {
+            list-style: none;
+            margin-top: 1.5rem;
+        }
+
+        .market-features li {
+            padding: 0.75rem 0;
+            color: #cbd5e1;
+            font-size: 0.9rem;
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .market-features li::before {
+            content: '→';
+            color: #a855f7;
+            font-weight: bold;
+        }
+
+        /* CTA */
+        .cta-section {
             position: relative;
             z-index: 1;
             padding: 5rem 2rem;
@@ -397,22 +547,28 @@
             max-width: 900px;
             margin: 0 auto;
             text-align: center;
-            background: linear-gradient(90deg, rgba(6, 182, 212, 0.1), rgba(168, 85, 247, 0.1));
-            border: 1px solid rgba(6, 182, 212, 0.2);
+            background: linear-gradient(135deg, rgba(6, 182, 212, 0.1), rgba(168, 85, 247, 0.1));
+            border: 2px solid rgba(6, 182, 212, 0.3);
             border-radius: 1.5rem;
-            padding: 3rem 2rem;
+            padding: 4rem 2rem;
+            transition: all 0.4s;
+        }
+
+        .cta-box:hover {
+            border-color: rgba(6, 182, 212, 0.6);
+            box-shadow: 0 20px 60px rgba(6, 182, 212, 0.1);
         }
 
         .cta-box h2 {
-            font-size: 2.25rem;
+            font-size: 2.5rem;
             font-weight: 900;
-            margin-bottom: 1rem;
+            margin-bottom: 1.5rem;
         }
 
         .cta-box p {
-            font-size: 1.125rem;
+            font-size: 1.1rem;
             color: #cbd5e1;
-            margin-bottom: 2rem;
+            margin-bottom: 2.5rem;
         }
 
         /* Footer */
@@ -420,7 +576,7 @@
             position: relative;
             z-index: 1;
             border-top: 1px solid rgba(148, 163, 184, 0.1);
-            padding: 3rem 2rem;
+            padding: 4rem 2rem 2rem;
             background: rgba(15, 23, 42, 0.5);
         }
 
@@ -429,13 +585,14 @@
             margin: 0 auto;
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 2rem;
-            margin-bottom: 2rem;
+            gap: 3rem;
+            margin-bottom: 3rem;
         }
 
         .footer-col h4 {
-            font-weight: bold;
+            font-weight: 700;
             margin-bottom: 1rem;
+            color: #06b6d4;
         }
 
         .footer-col ul {
@@ -443,13 +600,13 @@
         }
 
         .footer-col ul li {
-            margin-bottom: 0.5rem;
+            margin-bottom: 0.75rem;
         }
 
         .footer-col a {
             color: #94a3b8;
             text-decoration: none;
-            font-size: 0.875rem;
+            font-size: 0.9rem;
             transition: color 0.2s;
         }
 
@@ -462,185 +619,204 @@
             padding-top: 2rem;
             text-align: center;
             color: #64748b;
-            font-size: 0.875rem;
+            font-size: 0.85rem;
         }
 
         @media (max-width: 768px) {
-            .nav-links {
-                display: none;
-            }
-
-            .button-group {
-                flex-direction: column;
-            }
-
-            .btn {
-                width: 100%;
-            }
-
-            .blog-header {
-                flex-direction: column;
-                align-items: flex-start;
-            }
+            .demo-container { grid-template-columns: 1fr; }
+            .nav-links { display: none; }
+            .button-group { flex-direction: column; }
+            .btn { width: 100%; }
         }
     </style>
 </head>
 <body>
-    <!-- Background Orbs -->
     <div class="bg-orbs">
         <div class="orb orb1"></div>
         <div class="orb orb2"></div>
         <div class="orb orb3"></div>
     </div>
 
-    <!-- Navigation -->
     <nav id="navbar">
         <div class="nav-container">
             <div class="logo">▶ Replays AI</div>
             <ul class="nav-links">
-                <li><a href="#product">Product</a></li>
-                <li><a href="#blog">Blog</a></li>
-                <li><a href="#enterprise">Enterprise</a></li>
-                <li><a href="#contact">Contact</a></li>
+                <li><a href="#demo">Experience</a></li>
+                <li><a href="#features">Features</a></li>
+                <li><a href="#markets">Markets</a></li>
                 <li><button class="cta-button">Get Started</button></li>
             </ul>
         </div>
     </nav>
 
-    <!-- Hero Section -->
     <section class="hero" id="home">
         <div class="hero-content">
-            <div class="badge">✨ AI-Powered Sports Intelligence</div>
-            <h1>Turn Every <span class="gradient-text">Play into Gold</span></h1>
-            <p>Instant post-game highlights, AI-driven strategy analysis, and injury prediction. Built for coaches, broadcasters, and fans who demand more.</p>
+            <div class="badge">🎮 VR Post-Game Intelligence</div>
+            <h1>Watch Beyond <span class="gradient-text">The Highlights</span></h1>
+            <p>AI-powered immersive experiences that combine game footage, player insights, and coach strategy analysis. Every game. Every angle. Every decision explained.</p>
             
             <div class="button-group">
-                <button class="btn btn-primary">Watch Demo →</button>
-                <button class="btn btn-secondary">Schedule Call</button>
+                <button class="btn btn-primary">Experience Demo →</button>
+                <button class="btn btn-secondary">Book a Session</button>
             </div>
 
             <div class="stats">
                 <div class="stat">
                     <div class="stat-value">100+</div>
-                    <div class="stat-label">Teams Analyzing</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-value">1s</div>
-                    <div class="stat-label">Commentary Latency</div>
+                    <div class="stat-label">Teams Using Platform</div>
                 </div>
                 <div class="stat">
                     <div class="stat-value">2M+</div>
-                    <div class="stat-label">Fans Engaged</div>
+                    <div class="stat-label">Active Fans</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value">5-6 min</div>
+                    <div class="stat-label">AI-Generated Recaps</div>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- Features Section -->
-    <section class="features" id="product">
-        <h2 class="section-title">Engineered for Champions</h2>
+    <section class="demo-section" id="demo">
+        <div class="demo-container">
+            <div class="demo-video">
+                <div class="play-button"></div>
+            </div>
+            <div class="demo-content">
+                <h3>Immersive Post-Game Recaps</h3>
+                <p>Experience the game through AI-generated video summaries that go beyond traditional highlights. Watch in stunning 2D/3D with personalized commentary.</p>
+                <ul class="feature-list">
+                    <li>5-6 minute AI-generated recaps</li>
+                    <li>Dual AI announcers with deep insights</li>
+                    <li>Player & coach perspective analysis</li>
+                    <li>Historical context & pattern recognition</li>
+                    <li>Interactive decision scenarios</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <section class="features-section" id="features">
+        <h2 class="section-title">Engineered for Every Fan</h2>
         <div class="features-grid">
             <div class="feature-card">
-                <svg class="feature-icon" fill="currentColor" viewBox="0 0 24 24" color="#06b6d4"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-                <h3>Instant Highlights</h3>
-                <p>AI-generated post-game reels in seconds, not hours</p>
+                <div class="feature-content">
+                    <svg class="feature-icon" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+                    <h3>AI Announcers</h3>
+                    <p>Two trained agents provide context ESPN misses—player psychology, strategic reasoning, and historical patterns spanning decades.</p>
+                </div>
             </div>
-            <div class="feature-card">
-                <svg class="feature-icon" fill="currentColor" viewBox="0 0 24 24" color="#06b6d4"><path d="M3 13h2v8H3zm4-8h2v16H7zm4-2h2v18h-2zm4 4h2v14h-2zm4-2h2v16h-2z"/></svg>
-                <h3>Strategy Insights</h3>
-                <p>Bayesian models reveal patterns coaches never see</p>
-            </div>
-            <div class="feature-card">
-                <svg class="feature-icon" fill="currentColor" viewBox="0 0 24 24" color="#06b6d4"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/></svg>
-                <h3>Injury Prediction</h3>
-                <p>Prevent injuries before they happen with ML</p>
-            </div>
-            <div class="feature-card">
-                <svg class="feature-icon" fill="currentColor" viewBox="0 0 24 24" color="#06b6d4"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
-                <h3>Fan Personalization</h3>
-                <p>Highlight reels tailored to each viewer's interests</p>
-            </div>
-            <div class="feature-card">
-                <svg class="feature-icon" fill="currentColor" viewBox="0 0 24 24" color="#06b6d4"><path d="M8 5v14l11-7z"/></svg>
-                <h3>Real-time Commentary</h3>
-                <p>AI-powered insights at 1 second latency</p>
-            </div>
-            <div class="feature-card">
-                <svg class="feature-icon" fill="currentColor" viewBox="0 0 24 24" color="#06b6d4"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
-                <h3>Enterprise Ready</h3>
-                <p>Proven pilots with NBA and college programs</p>
-            </div>
-        </div>
-    </section>
 
-    <!-- Blog Section -->
-    <section class="blog" id="blog">
-        <div class="blog-header">
-            <h2 class="section-title">Latest Insights</h2>
-            <a href="#" style="color: #06b6d4; font-weight: bold; text-decoration: none;">View All →</a>
-        </div>
-        <div class="blog-grid">
-            <div class="blog-card">
-                <span class="blog-tag">AI & SPORTS</span>
-                <h3>How AI is Revolutionizing Coach Strategy Analysis</h3>
-                <p>Discover how machine learning transforms game footage into actionable coaching insights in seconds.</p>
-                <div class="blog-footer">
-                    <span>By Sarah Chen</span>
-                    <span>Feb 2, 2026</span>
+            <div class="feature-card">
+                <div class="feature-content">
+                    <svg class="feature-icon" fill="currentColor" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                    <h3>Interactive Scenarios</h3>
+                    <p>Pause and play through "What would you do?" decision points. See alternative play outcomes and VR predictions in real-time.</p>
                 </div>
             </div>
-            <div class="blog-card">
-                <span class="blog-tag">TECHNOLOGY</span>
-                <h3>The Future of Sports Broadcasting: Personalized Highlights</h3>
-                <p>Why one-size-fits-all highlights are dead. Learn how AI tailors content to every fan.</p>
-                <div class="blog-footer">
-                    <span>By Marcus Rodriguez</span>
-                    <span>Jan 28, 2026</span>
+
+            <div class="feature-card">
+                <div class="feature-content">
+                    <svg class="feature-icon" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+                    <h3>Deep Analysis Chatbot</h3>
+                    <p>Ask anything: betting probabilities, fantasy recommendations, injury recovery odds. Powered by decades of historical data.</p>
                 </div>
             </div>
-            <div class="blog-card">
-                <span class="blog-tag">ANALYTICS</span>
-                <h3>Injury Prediction: Using Bayesian Models to Keep Players Healthy</h3>
-                <p>Deep dive into our statistical modeling engine and how it predicts injuries before they happen.</p>
-                <div class="blog-footer">
-                    <span>By Dr. Elena Vasquez</span>
-                    <span>Jan 20, 2026</span>
+
+            <div class="feature-card">
+                <div class="feature-content">
+                    <svg class="feature-icon" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-13c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5z"/></svg>
+                    <h3>Team Builder</h3>
+                    <p>NBA 2K-style team creation. Combine your insights with advanced stats to build dream lineups and battle other users.</p>
                 </div>
             </div>
-            <div class="blog-card">
-                <span class="blog-tag">ENGINEERING</span>
-                <h3>From Game Film to Winning Moments: Our Player Highlights Algorithm</h3>
-                <p>See how we identify the most impactful plays in real-time and deliver them instantly.</p>
-                <div class="blog-footer">
-                    <span>By James Park</span>
-                    <span>Jan 15, 2026</span>
+
+            <div class="feature-card">
+                <div class="feature-content">
+                    <svg class="feature-icon" fill="currentColor" viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/></svg>
+                    <h3>Community Channels</h3>
+                    <p>Connect with other fans, share takes, debate decisions, and collaborate within personalized discussion spaces.</p>
+                </div>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-content">
+                    <svg class="feature-icon" fill="currentColor" viewBox="0 0 24 24"><path d="M3 9h18V5H3v4zm0 4h18v-2H3v2zm0 4h18v-2H3v2z"/></svg>
+                    <h3>Personalized Delivery</h3>
+                    <p>Auto-delivered recaps for every game your favorite teams play. Customize by player, team, position, and competition level.</p>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- CTA Section -->
-    <section class="cta" id="contact">
+    <section class="market-section" id="markets">
+        <h2 class="section-title">Built for Two Markets</h2>
+        <div class="market-toggle">
+            <button class="toggle-btn active" onclick="toggleMarket('consumer')">Consumer</button>
+            <button class="toggle-btn" onclick="toggleMarket('pro')">Pro Teams</button>
+        </div>
+
+        <div class="market-grid">
+            <div class="market-card" id="consumer-1">
+                <div>
+                    <h3>📱 The Ultimate Fan App</h3>
+                    <p>All-in-one immersive experience. No more fragmented ESPN, social media, and stat sites.</p>
+                    <ul class="market-features">
+                        <li>Personalized recaps by favorite teams/players</li>
+                        <li>Interact with other fans in real-time</li>
+                        <li>Build and manage fantasy teams</li>
+                        <li>Predictive betting & injury analysis</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="market-card" id="consumer-2">
+                <div>
+                    <h3>🏆 Professional Teams & Coaches</h3>
+                    <p>Replace traditional video review. Strategic intelligence without the tape room hours.</p>
+                    <ul class="market-features">
+                        <li>AI-assisted video analysis & key moments</li>
+                        <li>Strategic insights for player rotation</li>
+                        <li>Competitor performance tracking</li>
+                        <li>Fan sentiment analysis for revenue</li>
+                        <li>Automated opponent scouting reports</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="market-card" id="consumer-3">
+                <div>
+                    <h3>📺 Broadcasters & Media</h3>
+                    <p>Next-gen content production. Automated highlights, personalized streams, deeper engagement.</p>
+                    <ul class="market-features">
+                        <li>Real-time highlight generation</li>
+                        <li>Multi-angle replay generation</li>
+                        <li>Audience segmentation by interest</li>
+                        <li>AI-powered commentary production</li>
+                    </ul>
+                </div>
+            </section>
+
+    <section class="cta-section" id="contact">
         <div class="cta-box">
-            <h2>Ready to Transform Your Game?</h2>
-            <p>Join 100+ teams already using Replays AI to dominate their sport.</p>
-            <button class="btn btn-primary">Schedule Demo with Our Team</button>
+            <h2>Experience the Future of Sports</h2>
+            <p>Join 100+ teams and millions of fans already transforming how sports are watched and analyzed.</p>
+            <button class="btn btn-primary">Start Your Free Trial →</button>
         </div>
     </section>
 
-    <!-- Footer -->
     <footer>
         <div class="footer-content">
             <div class="footer-col">
-                <div style="font-size: 1.125rem; font-weight: 900; margin-bottom: 1rem;">▶ Replays AI</div>
-                <p style="color: #94a3b8; font-size: 0.875rem;">AI-powered post-game intelligence for teams & broadcasters.</p>
+                <div style="font-size: 1.25rem; font-weight: 900; margin-bottom: 1rem;">▶ Replays AI</div>
+                <p style="color: #94a3b8; font-size: 0.9rem;">AI-powered post-game VR experiences for fans and teams.</p>
             </div>
             <div class="footer-col">
                 <h4>Product</h4>
                 <ul>
                     <li><a href="#">Features</a></li>
                     <li><a href="#">Pricing</a></li>
-                    <li><a href="#">Security</a></li>
+                    <li><a href="#">Enterprise</a></li>
                 </ul>
             </div>
             <div class="footer-col">
@@ -652,29 +828,42 @@
                 </ul>
             </div>
             <div class="footer-col">
-                <h4>Legal</h4>
+                <h4>Resources</h4>
                 <ul>
-                    <li><a href="#">Privacy</a></li>
-                    <li><a href="#">Terms</a></li>
-                    <li><a href="#">Contact</a></li>
+                    <li><a href="#">Docs</a></li>
+                    <li><a href="#">API</a></li>
+                    <li><a href="#">Support</a></li>
                 </ul>
             </div>
         </div>
         <div class="footer-bottom">
-            © 2026 Replays AI. All rights reserved. | Built for the future of sports.
+            © 2026 Replays AI. All rights reserved. Transforming sports intelligence.
         </div>
     </footer>
 
     <script>
         // Navbar scroll effect
-        window.addEventListener('scroll', function() {
+        window.addEventListener('scroll', () => {
             const navbar = document.getElementById('navbar');
-            if (window.scrollY > 50) {
-                navbar.classList.add('scrolled');
-            } else {
-                navbar.classList.remove('scrolled');
-            }
+            navbar.classList.toggle('scrolled', window.scrollY > 50);
         });
+
+        // Market toggle
+        function toggleMarket(market) {
+            document.querySelectorAll('.toggle-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.market-card').forEach(card => card.style.opacity = '0.3');
+            
+            event.target.classList.add('active');
+            if (market === 'pro') {
+                document.querySelectorAll('.market-card').forEach((card, i) => {
+                    card.style.opacity = i >= 1 ? '1' : '0.3';
+                });
+            } else {
+                document.querySelectorAll('.market-card').forEach((card, i) => {
+                    card.style.opacity = i < 2 ? '1' : '0.3';
+                });
+            }
+        }
     </script>
 </body>
 </html>
