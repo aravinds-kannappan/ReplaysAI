@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { SignedIn, SignedOut } from "@clerk/clerk-react";
+import "./Landing.css";
 
 const FEATURES = [
   {
@@ -8,14 +9,14 @@ const FEATURES = [
     desc: "Three parallel agents — event extraction, computer vision, and LLM summarization — generate your game recaps in seconds.",
   },
   {
-    icon: "🎯",
-    title: "Predictions",
-    desc: "Pick winners before tipoff. Earn points for accuracy. Climb the leaderboard against fans nationwide.",
-  },
-  {
     icon: "🏀",
     title: "Fan Mode",
     desc: "Every recap rewritten from your team's perspective. Win or lose, get the story your team deserves.",
+  },
+  {
+    icon: "🎯",
+    title: "Predictions",
+    desc: "Pick winners before tipoff. Earn points for accuracy. Climb the leaderboard against fans nationwide.",
   },
   {
     icon: "📊",
@@ -36,6 +37,9 @@ export default function Landing() {
     <div className="landing">
       {/* Hero */}
       <section className="hero-section">
+        {/* Extra floating orb */}
+        <div className="hero-orb-extra" />
+
         <div className="hero-content">
           <div className="hero-badge">NBA · NFL · AI-Powered</div>
           <h1>
@@ -56,9 +60,10 @@ export default function Landing() {
             </SignedIn>
           </div>
         </div>
+
         <div className="hero-visual">
           <div className="mock-card">
-            <div className="mock-tag">NBA · FINAL</div>
+            <div className="mock-tag">NBA · Playoffs · Final</div>
             <div className="mock-teams">
               <div className="mock-team">
                 <span className="mock-abbr">SAS</span>
@@ -71,8 +76,8 @@ export default function Landing() {
               </div>
             </div>
             <div className="mock-recap-preview">
-              <span className="mock-label">🤖 AI Recap</span>
-              <p>The Spurs opened strong with a 9-0 run in Q1, Wembanyama anchoring the paint...</p>
+              <span className="mock-label">🤖 AI Recap · Fan Mode</span>
+              <p>The Spurs opened strong with a 9-0 run in Q1, Wembanyama anchoring the paint with two early blocks that set the tone...</p>
             </div>
             <div className="mock-badges">
               <span className="badge badge-live">🔥 7-day streak</span>
@@ -83,18 +88,21 @@ export default function Landing() {
       </section>
 
       {/* Stats bar */}
-      <section className="stats-bar">
-        {STATS.map((s) => (
-          <div key={s.label} className="stat-item">
-            <span className="stat-value">{s.value}</span>
-            <span className="stat-label">{s.label}</span>
-          </div>
-        ))}
-      </section>
+      <div className="stats-bar">
+        <div className="stats-bar-inner">
+          {STATS.map((s) => (
+            <div key={s.label} className="stat-item">
+              <span className="stat-value">{s.value}</span>
+              <span className="stat-label">{s.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* Features */}
       <section className="features-section">
         <h2>Everything serious fans need</h2>
+        <p className="section-sub">Real data. Real AI. Built for fans who want more than a box score.</p>
         <div className="features-grid">
           {FEATURES.map((f) => (
             <div key={f.title} className="feature-card">
@@ -109,31 +117,32 @@ export default function Landing() {
       {/* How it works */}
       <section className="how-section">
         <h2>Powered by real multimodal AI</h2>
+        <p className="section-sub">Three specialized agents run in parallel so your recap arrives fast.</p>
         <div className="how-steps">
           <div className="how-step">
-            <div className="step-num">01</div>
-            <h4>Ingest</h4>
-            <p>Real ESPN play-by-play data flows into PostgreSQL — every dunk, block, and turnover.</p>
+            <div className="step-num">01 · Ingest</div>
+            <h4>Real Play-by-Play</h4>
+            <p>ESPN play-by-play data flows into PostgreSQL — every dunk, block, and turnover, stored as structured events.</p>
           </div>
           <div className="how-arrow">→</div>
           <div className="how-step">
-            <div className="step-num">02</div>
-            <h4>Analyze</h4>
-            <p>Three parallel agents: statistical extraction, CV video classification, and LLM summarization run concurrently.</p>
+            <div className="step-num">02 · Analyze</div>
+            <h4>Three Parallel Agents</h4>
+            <p>Statistical extraction, CV video classification, and LLM summarization run concurrently via asyncio — no waiting in line.</p>
           </div>
           <div className="how-arrow">→</div>
           <div className="how-step">
-            <div className="step-num">03</div>
-            <h4>Personalize</h4>
-            <p>Fan Mode rewrites every recap from your team's perspective. Win or lose, you get your story.</p>
+            <div className="step-num">03 · Personalize</div>
+            <h4>Your Team's Story</h4>
+            <p>Fan Mode rewrites the recap from your team's perspective. Win or lose, you get the honest story your fans deserve.</p>
           </div>
         </div>
       </section>
 
       {/* CTA */}
       <section className="cta-section">
-        <h2>Join the fans who get it</h2>
-        <p>No credit card. Set up in 60 seconds. Pick your team and start getting recaps your way.</p>
+        <h2>Join fans who get it</h2>
+        <p>No credit card. Pick your team in 60 seconds. Your personalized feed starts immediately.</p>
         <SignedOut>
           <Link to="/sign-up" className="btn-hero-primary">Create Free Account</Link>
         </SignedOut>
@@ -143,7 +152,7 @@ export default function Landing() {
       </section>
 
       <footer className="landing-footer">
-        <span>Replays AI · Built with Claude Sonnet + Computer Vision</span>
+        Replays AI · Built with Claude Sonnet + Computer Vision
       </footer>
     </div>
   );
