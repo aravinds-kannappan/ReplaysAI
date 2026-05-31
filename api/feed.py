@@ -7,11 +7,11 @@ from typing import Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from backend.agents.fan_perspective import fan_perspective_agent
-from backend.cache.redis_client import cache_get, cache_set
-from backend.db.models import FanRecap, Game, User, UserFavoriteTeam
-from backend.db.session import get_db
-from backend.middleware.clerk_auth import get_current_user
+from agents.fan_perspective import fan_perspective_agent
+from cache.redis_client import cache_get, cache_set
+from db.models import FanRecap, Game, User, UserFavoriteTeam
+from db.session import get_db
+from middleware.clerk_auth import get_current_user
 
 router = APIRouter(prefix="/api", tags=["feed"])
 

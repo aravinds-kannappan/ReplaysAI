@@ -35,8 +35,8 @@ def _poll_interval_seconds() -> int:
 
 
 def run_scheduler() -> None:
-    from backend.ingestion.nba_ingester import run_live_refresh as nba_refresh
-    from backend.ingestion.nfl_ingester import run_live_refresh as nfl_refresh
+    from ingestion.nba_ingester import run_live_refresh as nba_refresh
+    from ingestion.nfl_ingester import run_live_refresh as nfl_refresh
 
     print("[Scheduler] Live refresh scheduler started. Ctrl-C to stop.")
     print("[Scheduler] Note: run seed_data.py first for historical backfill.\n")

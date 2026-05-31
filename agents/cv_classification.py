@@ -9,11 +9,11 @@ from typing import Optional
 
 import anthropic
 
-from backend.config import get_settings
-from backend.db.models import CVClassification, Game
-from backend.db.session import get_session_factory
-from backend.video.frame_extractor import get_video_frames_for_game
-from backend.video.youtube_search import search_highlight_video
+from config import get_settings
+from db.models import CVClassification, Game
+from db.session import get_session_factory
+from video.frame_extractor import get_video_frames_for_game
+from video.youtube_search import search_highlight_video
 
 PLAY_TYPES = ["dunk", "three_pointer", "block", "steal", "turnover",
               "free_throw", "assist", "touchdown", "interception", "field_goal",

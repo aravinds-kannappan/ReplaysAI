@@ -7,9 +7,9 @@ import asyncio
 
 import anthropic
 
-from backend.config import get_settings
-from backend.db.models import FanRecap, Game, GameFeature, Recap, Team
-from backend.db.session import get_session_factory
+from config import get_settings
+from db.models import FanRecap, Game, GameFeature, Recap, Team
+from db.session import get_session_factory
 
 MODEL = "claude-sonnet-4-6"
 

@@ -9,12 +9,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from backend.db.models import (
+from db.models import (
     Badge, Notification, Team, Player, User,
     UserBadge, UserFavoriteTeam, UserFollowedPlayer, UserPoints, UserStreak,
 )
-from backend.db.session import get_db
-from backend.middleware.clerk_auth import get_current_user
+from db.session import get_db
+from middleware.clerk_auth import get_current_user
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 

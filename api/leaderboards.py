@@ -4,9 +4,9 @@ Leaderboard endpoints.
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from backend.db.models import User, UserPoints, UserStreak
-from backend.db.session import get_db
-from backend.middleware.clerk_auth import get_current_user
+from db.models import User, UserPoints, UserStreak
+from db.session import get_db
+from middleware.clerk_auth import get_current_user
 
 router = APIRouter(prefix="/api", tags=["leaderboard"])
 

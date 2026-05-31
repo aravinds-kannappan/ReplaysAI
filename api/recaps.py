@@ -2,10 +2,10 @@ import asyncio
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from backend.agents.orchestrator import generate_game_recap
-from backend.cache.redis_client import cache_get, cache_set
-from backend.db.models import Game, Recap
-from backend.db.session import get_db
+from agents.orchestrator import generate_game_recap
+from cache.redis_client import cache_get, cache_set
+from db.models import Game, Recap
+from db.session import get_db
 
 router = APIRouter(prefix="/api/games", tags=["recaps"])
 

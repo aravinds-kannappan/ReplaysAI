@@ -4,9 +4,9 @@ Agent 3 (LLM) receives Agent 1 + 2 outputs as context.
 """
 import asyncio
 
-from backend.agents.event_extraction import event_extraction_agent
-from backend.agents.cv_classification import cv_classification_agent
-from backend.agents.llm_summarization import llm_summarization_agent
+from agents.event_extraction import event_extraction_agent
+from agents.cv_classification import cv_classification_agent
+from agents.llm_summarization import llm_summarization_agent
 
 
 async def generate_game_recap(game_id: int) -> dict:

@@ -7,9 +7,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from backend.db.models import Game, Prediction, User
-from backend.db.session import get_db
-from backend.middleware.clerk_auth import get_current_user
+from db.models import Game, Prediction, User
+from db.session import get_db
+from middleware.clerk_auth import get_current_user
 
 router = APIRouter(prefix="/api/predictions", tags=["predictions"])
 

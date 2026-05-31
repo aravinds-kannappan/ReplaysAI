@@ -11,9 +11,9 @@ from fastapi import Depends, HTTPException, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
-from backend.config import get_settings
-from backend.db.models import User
-from backend.db.session import get_db
+from config import get_settings
+from db.models import User
+from db.session import get_db
 
 _jwks_cache: Optional[dict] = None
 security = HTTPBearer(auto_error=False)
@@ -82,7 +82,7 @@ def get_current_user(
         db.add(user)
         db.flush()
         # Initialize points + streaks
-        from backend.db.models import UserPoints, UserStreak
+        from db.models import UserPoints, UserStreak
         db.add(UserPoints(user_id=user.id))
         db.add(UserStreak(user_id=user.id))
         db.commit()

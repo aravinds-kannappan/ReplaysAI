@@ -19,8 +19,8 @@ from nba_api.stats.static import teams as nba_teams_static
 from sqlalchemy.orm import Session
 from tqdm import tqdm
 
-from backend.db.models import Game, Play, Player, PlayerGameStat, Team
-from backend.db.session import get_session_factory
+from db.models import Game, Play, Player, PlayerGameStat, Team
+from db.session import get_session_factory
 
 SPORT = "NBA"
 ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba"

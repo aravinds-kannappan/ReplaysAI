@@ -1,16 +1,16 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.api.auth import router as auth_router
-from backend.api.fantasy import router as fantasy_router
-from backend.api.feed import router as feed_router
-from backend.api.games import router as games_router
-from backend.api.leaderboards import router as leaderboard_router
-from backend.api.predictions import router as predictions_router
-from backend.api.rankings import router as rankings_router
-from backend.api.recaps import router as recaps_router
-from backend.db.models import Badge, Base
-from backend.db.session import get_engine, get_session_factory
+from api.auth import router as auth_router
+from api.fantasy import router as fantasy_router
+from api.feed import router as feed_router
+from api.games import router as games_router
+from api.leaderboards import router as leaderboard_router
+from api.predictions import router as predictions_router
+from api.rankings import router as rankings_router
+from api.recaps import router as recaps_router
+from db.models import Badge, Base
+from db.session import get_engine, get_session_factory
 
 app = FastAPI(title="Replays AI", version="2.0.0")
 

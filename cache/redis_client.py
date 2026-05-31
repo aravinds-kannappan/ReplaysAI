@@ -1,7 +1,7 @@
 import json
 from typing import Any, Optional
 import redis
-from backend.config import get_settings
+from config import get_settings
 
 _client: Optional[redis.Redis] = None
 

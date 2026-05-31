@@ -18,8 +18,8 @@ import httpx
 from sqlalchemy.orm import Session
 from tqdm import tqdm
 
-from backend.db.models import Game, Play, Player, PlayerGameStat, Team
-from backend.db.session import get_session_factory
+from db.models import Game, Play, Player, PlayerGameStat, Team
+from db.session import get_session_factory
 
 SPORT = "NFL"
 ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports/football/nfl"
@@ -217,7 +217,7 @@ def _upsert_game_from_event(
 
 
 def _ingest_plays_from_summary(db: Session, game_db_id: int, summary: dict) -> int:
-    from backend.db.models import Play
+    from db.models import Play
     if db.query(Play).filter_by(game_id=game_db_id).count() > 0:
         return 0
 

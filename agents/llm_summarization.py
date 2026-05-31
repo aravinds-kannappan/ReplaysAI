@@ -8,9 +8,9 @@ from typing import Optional
 
 import anthropic
 
-from backend.config import get_settings
-from backend.db.models import Game, Play, Recap
-from backend.db.session import get_session_factory
+from config import get_settings
+from db.models import Game, Play, Recap
+from db.session import get_session_factory
 
 MODEL = "claude-sonnet-4-6"
 MAX_PLAYS_PER_TASK = 80

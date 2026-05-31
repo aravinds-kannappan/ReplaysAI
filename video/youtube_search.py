@@ -4,7 +4,7 @@ Falls back to constructing a search URL when no API key is available.
 """
 import httpx
 from typing import Optional
-from backend.config import get_settings
+from config import get_settings
 
 
 YT_SEARCH_BASE = "https://www.googleapis.com/youtube/v3/search"

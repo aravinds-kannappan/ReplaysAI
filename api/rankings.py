@@ -3,9 +3,9 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 from typing import Optional
 
-from backend.cache.redis_client import cache_get, cache_set
-from backend.db.models import Game, Team
-from backend.db.session import get_db
+from cache.redis_client import cache_get, cache_set
+from db.models import Game, Team
+from db.session import get_db
 
 router = APIRouter(prefix="/api", tags=["rankings"])
 
@@ -71,7 +71,7 @@ def get_rankings(sport: Optional[str] = Query(None), db: Session = Depends(get_d
 
 @router.get("/players/{player_id}")
 def get_player(player_id: int, db: Session = Depends(get_db)):
-    from backend.db.models import Player, Play
+    from db.models import Player, Play
     player = db.query(Player).get(player_id)
     if not player:
         from fastapi import HTTPException

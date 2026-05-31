@@ -17,8 +17,8 @@ import sys
 import time
 from datetime import datetime
 
-from backend.db.models import Base, Badge
-from backend.db.session import get_engine, get_session_factory
+from db.models import Base, Badge
+from db.session import get_engine, get_session_factory
 
 
 BADGE_SEEDS = [
@@ -59,7 +59,7 @@ def print_header(text: str) -> None:
 
 
 def run_nba_backfill(seasons: int, fetch_plays: bool, fetch_boxscores: bool) -> None:
-    from backend.ingestion.nba_ingester import backfill_historical_nba
+    from ingestion.nba_ingester import backfill_historical_nba
     backfill_historical_nba(
         num_seasons=seasons,
         fetch_plays=fetch_plays,
@@ -68,7 +68,7 @@ def run_nba_backfill(seasons: int, fetch_plays: bool, fetch_boxscores: bool) -> 
 
 
 def run_nfl_backfill(seasons: int, fetch_plays: bool, fetch_boxscores: bool) -> None:
-    from backend.ingestion.nfl_ingester import backfill_historical_nfl
+    from ingestion.nfl_ingester import backfill_historical_nfl
     backfill_historical_nfl(
         num_seasons=seasons,
         fetch_plays=fetch_plays,

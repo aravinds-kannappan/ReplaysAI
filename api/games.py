@@ -3,8 +3,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from backend.db.models import Game, Play, CVClassification
-from backend.db.session import get_db
+from db.models import Game, Play, CVClassification
+from db.session import get_db
 
 router = APIRouter(prefix="/api/games", tags=["games"])
 

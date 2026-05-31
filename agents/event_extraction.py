@@ -6,8 +6,8 @@ Reads plays from DB and computes momentum, key moments, top performers.
 from collections import defaultdict
 from sqlalchemy.orm import Session
 
-from backend.db.models import GameFeature, Play, Game, Player, Team
-from backend.db.session import get_session_factory
+from db.models import GameFeature, Play, Game, Player, Team
+from db.session import get_session_factory
 
 
 def _compute_scoring_runs(plays: list[Play]) -> list[dict]:

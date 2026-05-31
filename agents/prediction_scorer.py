@@ -6,8 +6,8 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from backend.db.models import Badge, Game, Notification, Prediction, User, UserBadge, UserPoints, UserStreak
-from backend.db.session import get_session_factory
+from db.models import Badge, Game, Notification, Prediction, User, UserBadge, UserPoints, UserStreak
+from db.session import get_session_factory
 
 
 def _maybe_award_badge(user_id: int, slug: str, db: Session) -> None:
