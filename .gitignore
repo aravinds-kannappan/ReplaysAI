@@ -1,5 +1,9 @@
 .env
+.env.local
 .venv/
+# iCloud duplicates
+* 2.*
+* 2
 __pycache__/
 *.pyc
 *.pyo
