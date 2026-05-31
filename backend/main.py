@@ -1,13 +1,18 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from backend.api.auth import router as auth_router
+from backend.api.fantasy import router as fantasy_router
+from backend.api.feed import router as feed_router
 from backend.api.games import router as games_router
-from backend.api.recaps import router as recaps_router
+from backend.api.leaderboards import router as leaderboard_router
+from backend.api.predictions import router as predictions_router
 from backend.api.rankings import router as rankings_router
-from backend.db.models import Base
-from backend.db.session import get_engine
+from backend.api.recaps import router as recaps_router
+from backend.db.models import Badge, Base
+from backend.db.session import get_engine, get_session_factory
 
-app = FastAPI(title="Replays AI", version="1.0.0")
+app = FastAPI(title="Replays AI", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -17,16 +22,39 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_router)
+app.include_router(feed_router)
 app.include_router(games_router)
 app.include_router(recaps_router)
 app.include_router(rankings_router)
+app.include_router(predictions_router)
+app.include_router(fantasy_router)
+app.include_router(leaderboard_router)
+
+
+BADGE_SEEDS = [
+    {"slug": "week1",    "name": "First Pick",    "description": "Made your first prediction",    "icon": "🎯", "threshold": 1},
+    {"slug": "oracle",   "name": "Oracle",        "description": "10 correct predictions",        "icon": "🔮", "threshold": 10},
+    {"slug": "loyal",    "name": "Loyal Fan",     "description": "7-day login streak",            "icon": "🔥", "threshold": 7},
+    {"slug": "superfan", "name": "Superfan",      "description": "30-day login streak",           "icon": "🏆", "threshold": 30},
+    {"slug": "analyst",  "name": "Analyst",       "description": "Generated 10 recaps",           "icon": "📊", "threshold": 10},
+    {"slug": "clutch",   "name": "Clutch",        "description": "Predicted a game within 5 pts", "icon": "⏱️",  "threshold": 1},
+]
 
 
 @app.on_event("startup")
-def create_tables():
+def startup():
     Base.metadata.create_all(bind=get_engine())
+    db = get_session_factory()()
+    try:
+        for seed in BADGE_SEEDS:
+            if not db.query(Badge).filter_by(slug=seed["slug"]).first():
+                db.add(Badge(**seed))
+        db.commit()
+    finally:
+        db.close()
 
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "version": "2.0.0"}

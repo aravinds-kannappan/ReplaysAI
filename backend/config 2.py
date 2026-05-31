@@ -7,7 +7,6 @@ class Settings(BaseSettings):
     youtube_api_key: str = ""
     database_url: str = "postgresql://postgres:postgres@localhost:5432/replaysai"
     redis_url: str = "redis://localhost:6379"
-    clerk_secret_key: str = ""
 
     class Config:
         env_file = ".env"
