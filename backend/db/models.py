@@ -121,6 +121,41 @@ class Recap(Base):
     game = relationship("Game", back_populates="recap")
 
 
+class PlayerGameStat(Base):
+    """Box score stats for a single player in a single game."""
+    __tablename__ = "player_game_stats"
+
+    id = Column(Integer, primary_key=True)
+    game_id = Column(Integer, ForeignKey("games.id"))
+    player_id = Column(Integer, ForeignKey("players.id"), nullable=True)
+    team_id = Column(Integer, ForeignKey("teams.id"), nullable=True)
+    player_name = Column(String(200))          # denormalised for speed
+    minutes = Column(Float)
+    points = Column(Integer)
+    assists = Column(Integer)
+    rebounds = Column(Integer)
+    offensive_rebounds = Column(Integer)
+    defensive_rebounds = Column(Integer)
+    blocks = Column(Integer)
+    steals = Column(Integer)
+    turnovers = Column(Integer)
+    fouls = Column(Integer)
+    field_goals_made = Column(Integer)
+    field_goals_attempted = Column(Integer)
+    three_pointers_made = Column(Integer)
+    three_pointers_attempted = Column(Integer)
+    free_throws_made = Column(Integer)
+    free_throws_attempted = Column(Integer)
+    plus_minus = Column(Float)
+    raw = Column(JSONB)                        # full raw stat blob
+
+    game = relationship("Game")
+    player = relationship("Player")
+    team = relationship("Team")
+
+    __table_args__ = (UniqueConstraint("game_id", "player_name"),)
+
+
 # ─── User / Auth models ───────────────────────────────────────────────────────
 
 class User(Base):

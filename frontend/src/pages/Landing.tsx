@@ -2,153 +2,253 @@ import { Link } from "react-router-dom";
 import { SignedIn, SignedOut } from "@clerk/clerk-react";
 import "./Landing.css";
 
-const FEATURES = [
-  {
-    icon: "🤖",
-    title: "AI Recaps",
-    desc: "Three parallel agents — event extraction, computer vision, and LLM summarization — generate your game recaps in seconds.",
-  },
-  {
-    icon: "🏀",
-    title: "Fan Mode",
-    desc: "Every recap rewritten from your team's perspective. Win or lose, get the story your team deserves.",
-  },
-  {
-    icon: "🎯",
-    title: "Predictions",
-    desc: "Pick winners before tipoff. Earn points for accuracy. Climb the leaderboard against fans nationwide.",
-  },
-  {
-    icon: "📊",
-    title: "Roster Builder",
-    desc: "Build a weekly roster of players. Track their performance across real play-by-play data.",
-  },
+const STATS = [
+  { value: "5,597+", label: "Plays Tracked" },
+  { value: "5", label: "Seasons" },
+  { value: "4", label: "AI Agents" },
+  { value: "2", label: "Sports" },
 ];
 
-const STATS = [
-  { value: "5,597", label: "Plays Tracked" },
-  { value: "11", label: "Games Ingested" },
-  { value: "3", label: "AI Agents" },
-  { value: "2", label: "Sports" },
+const POINTS_ROWS = [
+  ["Correct prediction", "+100"],
+  ["Spread within 5 pts", "+150"],
+  ["Daily login", "+5"],
+  ["7-day streak bonus", "+25"],
 ];
 
 export default function Landing() {
   return (
     <div className="landing">
-      {/* Hero */}
-      <section className="hero-section">
-        {/* Extra floating orb */}
-        <div className="hero-orb-extra" />
+      {/* Animated orb blobs */}
+      <div className="orb orb-1" />
+      <div className="orb orb-2" />
+      <div className="orb orb-3" />
+      <div className="orb orb-4" />
 
-        <div className="hero-content">
-          <div className="hero-badge">NBA · NFL · AI-Powered</div>
-          <h1>
-            Your team's game.<br />
-            <span className="accent">Your AI. Your recap.</span>
-          </h1>
-          <p className="hero-sub">
-            Replays AI combines multimodal AI — computer vision, LLMs, and real play-by-play data —
-            to deliver personalized game recaps, smart predictions, and fan-mode highlights.
-          </p>
-          <div className="hero-ctas">
-            <SignedOut>
-              <Link to="/sign-up" className="btn-hero-primary">Get Started Free</Link>
-              <Link to="/sign-in" className="btn-hero-ghost">Sign In</Link>
-            </SignedOut>
-            <SignedIn>
-              <Link to="/feed" className="btn-hero-primary">Go to My Feed →</Link>
-            </SignedIn>
-          </div>
-        </div>
-
-        <div className="hero-visual">
-          <div className="mock-card">
-            <div className="mock-tag">NBA · Playoffs · Final</div>
-            <div className="mock-teams">
-              <div className="mock-team">
-                <span className="mock-abbr">SAS</span>
-                <span className="mock-score accent">111</span>
-              </div>
-              <span className="mock-at">@</span>
-              <div className="mock-team">
-                <span className="mock-abbr">OKC</span>
-                <span className="mock-score">103</span>
-              </div>
-            </div>
-            <div className="mock-recap-preview">
-              <span className="mock-label">🤖 AI Recap · Fan Mode</span>
-              <p>The Spurs opened strong with a 9-0 run in Q1, Wembanyama anchoring the paint with two early blocks that set the tone...</p>
-            </div>
-            <div className="mock-badges">
-              <span className="badge badge-live">🔥 7-day streak</span>
-              <span className="badge badge-final">🔮 Prediction correct</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Stats bar */}
-      <div className="stats-bar">
-        <div className="stats-bar-inner">
-          {STATS.map((s) => (
-            <div key={s.label} className="stat-item">
-              <span className="stat-value">{s.value}</span>
-              <span className="stat-label">{s.label}</span>
-            </div>
-          ))}
-        </div>
+      {/* Floating particles */}
+      <div className="particles">
+        {Array.from({ length: 12 }).map((_, i) => (
+          <div key={i} className="particle" />
+        ))}
       </div>
 
-      {/* Features */}
-      <section className="features-section">
-        <h2>Everything serious fans need</h2>
-        <p className="section-sub">Real data. Real AI. Built for fans who want more than a box score.</p>
-        <div className="features-grid">
-          {FEATURES.map((f) => (
-            <div key={f.title} className="feature-card">
-              <span className="feature-icon">{f.icon}</span>
-              <h3>{f.title}</h3>
-              <p>{f.desc}</p>
+      {/* ── Hero ─────────────────────────────────────────── */}
+      <section className="hero-section">
+        <div className="hero-eyebrow">
+          <span className="eyebrow-dot" />
+          NBA · NFL · Multimodal AI
+        </div>
+
+        <h1 className="hero-title">
+          The sports platform
+          <span className="line-2">built for real fans.</span>
+        </h1>
+
+        <p className="hero-sub">
+          Real play-by-play data. Computer vision. LLMs that write from your
+          team's perspective. Predictions that earn you points. One platform
+          that finally gets it.
+        </p>
+
+        <div className="hero-ctas">
+          <SignedOut>
+            <Link to="/sign-up" className="btn-hero-primary">
+              Get Started Free →
+            </Link>
+            <Link to="/sign-in" className="btn-hero-ghost">
+              Sign In
+            </Link>
+          </SignedOut>
+          <SignedIn>
+            <Link to="/feed" className="btn-hero-primary">
+              Go to My Feed →
+            </Link>
+          </SignedIn>
+        </div>
+
+        {/* Live stats row */}
+        <div className="hero-stats">
+          {STATS.map((s) => (
+            <div key={s.label} className="stat-pill">
+              <span className="stat-pill-value">{s.value}</span>
+              <span className="stat-pill-label">{s.label}</span>
             </div>
           ))}
         </div>
+
+        <div className="scroll-hint">
+          <span>Scroll</span>
+          <div className="scroll-arrow" />
+        </div>
       </section>
 
-      {/* How it works */}
-      <section className="how-section">
-        <h2>Powered by real multimodal AI</h2>
-        <p className="section-sub">Three specialized agents run in parallel so your recap arrives fast.</p>
-        <div className="how-steps">
-          <div className="how-step">
-            <div className="step-num">01 · Ingest</div>
-            <h4>Real Play-by-Play</h4>
-            <p>ESPN play-by-play data flows into PostgreSQL — every dunk, block, and turnover, stored as structured events.</p>
+      {/* ── Feature Bento Grid ───────────────────────────── */}
+      <section className="features-section">
+        <div className="section-label">What you get</div>
+        <h2>Everything a serious fan needs</h2>
+
+        <div className="features-bento">
+          {/* Card 1 — AI Pipeline (wide) */}
+          <div className="bento-card wide accent-orange">
+            <span className="bento-icon">🤖</span>
+            <h3>3-Agent AI Recap Pipeline</h3>
+            <p>
+              Three specialized agents run in parallel — statistical event
+              extraction, computer vision play classification, and LLM
+              summarization — so your recap is ready in seconds, not minutes.
+            </p>
+            <div className="pipeline-viz">
+              <span className="pipe-step s1">Event Extraction</span>
+              <span className="pipe-arrow">→</span>
+              <span className="pipe-step s2">CV Classification</span>
+              <span className="pipe-arrow">→</span>
+              <span className="pipe-step s3">LLM Summary</span>
+              <span className="pipe-arrow">→</span>
+              <span className="pipe-step s4">Fan Perspective</span>
+            </div>
           </div>
-          <div className="how-arrow">→</div>
-          <div className="how-step">
-            <div className="step-num">02 · Analyze</div>
-            <h4>Three Parallel Agents</h4>
-            <p>Statistical extraction, CV video classification, and LLM summarization run concurrently via asyncio — no waiting in line.</p>
+
+          {/* Card 2 — Fan Mode (tall) */}
+          <div className="bento-card tall accent-purple">
+            <span className="bento-icon">🏀</span>
+            <h3>Fan Mode</h3>
+            <p>
+              Every recap rewritten from your team's exact perspective.
+              Wins land with energy. Losses get an honest post-mortem.
+              Powered by Claude Sonnet — cached so it's instant on revisit.
+            </p>
+            <div style={{ marginTop: 20 }}>
+              <div className="pipe-step s3" style={{ display: "inline-block", marginBottom: 8 }}>
+                Generic recap in
+              </div>
+              <div style={{ fontSize: "1.4rem", margin: "4px 0" }}>↓</div>
+              <div className="pipe-step s4" style={{ display: "inline-block" }}>
+                Your team's story out
+              </div>
+            </div>
           </div>
-          <div className="how-arrow">→</div>
-          <div className="how-step">
-            <div className="step-num">03 · Personalize</div>
-            <h4>Your Team's Story</h4>
-            <p>Fan Mode rewrites the recap from your team's perspective. Win or lose, you get the honest story your fans deserve.</p>
+
+          {/* Card 3 — Predictions (half) */}
+          <div className="bento-card half accent-pink">
+            <span className="bento-icon">🎯</span>
+            <h3>Predictions</h3>
+            <p>
+              Pick game winners before tipoff. Add a spread prediction for
+              bonus points. Auto-scored when the game goes final.
+            </p>
+          </div>
+
+          {/* Card 4 — Points (half) */}
+          <div className="bento-card half accent-blue">
+            <span className="bento-icon">⭐</span>
+            <h3>Points & Streaks</h3>
+            <div className="points-list">
+              {POINTS_ROWS.map(([action, pts]) => (
+                <div key={action} className="points-row">
+                  <span>{action}</span>
+                  <span>{pts} pts</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Card 5 — Real Data (third) */}
+          <div className="bento-card third">
+            <span className="bento-icon">📊</span>
+            <h3>Real Data</h3>
+            <p>
+              5+ seasons of NBA & NFL play-by-play. Every dunk, block, TD,
+              and interception — not mock data.
+            </p>
+          </div>
+
+          {/* Card 6 — Leaderboard (third) */}
+          <div className="bento-card third accent-orange">
+            <span className="bento-icon">🏆</span>
+            <h3>Leaderboard</h3>
+            <p>
+              Global rankings by prediction accuracy and points. Badges for
+              streaks, clutch picks, and consistent engagement.
+            </p>
+          </div>
+
+          {/* Card 7 — Roster (third) */}
+          <div className="bento-card third accent-purple">
+            <span className="bento-icon">📋</span>
+            <h3>Roster Builder</h3>
+            <p>
+              Pick 8 players each week. Impact scores drawn from real
+              play-by-play stats — not projections.
+            </p>
           </div>
         </div>
       </section>
 
-      {/* CTA */}
+      {/* ── How it works timeline ────────────────────────── */}
+      <section className="how-section">
+        <div className="section-label">Under the hood</div>
+        <h2>Powered by multimodal AI</h2>
+
+        <div className="how-timeline">
+          <div className="how-step">
+            <div className="how-num how-num-1">01</div>
+            <h4>Ingest</h4>
+            <p>
+              ESPN play-by-play lands in PostgreSQL. Every dunk and
+              fourth-quarter stop, structured and indexed.
+            </p>
+          </div>
+          <div className="how-step">
+            <div className="how-num how-num-2">02</div>
+            <h4>Extract</h4>
+            <p>
+              Agent 1 computes momentum shifts, clutch moments, and
+              top-performer impact scores in pure Python — no LLM cost.
+            </p>
+          </div>
+          <div className="how-step">
+            <div className="how-num how-num-3">03</div>
+            <h4>See</h4>
+            <p>
+              Agent 2 downloads highlight video, extracts frames via OpenCV,
+              and classifies plays with Claude Vision.
+            </p>
+          </div>
+          <div className="how-step">
+            <div className="how-num how-num-4">04</div>
+            <h4>Tell</h4>
+            <p>
+              Agent 3 runs 4 parallel LLM calls, assembles a full recap,
+              then Agent 4 rewrites it for your team's fans.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* ── CTA ──────────────────────────────────────────── */}
       <section className="cta-section">
-        <h2>Join fans who get it</h2>
-        <p>No credit card. Pick your team in 60 seconds. Your personalized feed starts immediately.</p>
-        <SignedOut>
-          <Link to="/sign-up" className="btn-hero-primary">Create Free Account</Link>
-        </SignedOut>
-        <SignedIn>
-          <Link to="/feed" className="btn-hero-primary">Go to My Feed →</Link>
-        </SignedIn>
+        <div className="cta-card">
+          <h2>Your team deserves better recaps.</h2>
+          <p>
+            No credit card. Pick your team in 60 seconds.
+            Personalized feed starts immediately.
+          </p>
+          <div className="cta-badges">
+            {["🎯 Smart Predictions", "🏀 Fan Mode Recaps", "🏆 Live Leaderboard", "📊 Real Play Data"].map((b) => (
+              <span key={b} className="cta-badge">{b}</span>
+            ))}
+          </div>
+          <SignedOut>
+            <Link to="/sign-up" className="btn-hero-primary">
+              Create Free Account
+            </Link>
+          </SignedOut>
+          <SignedIn>
+            <Link to="/feed" className="btn-hero-primary">
+              Go to My Feed →
+            </Link>
+          </SignedIn>
+        </div>
       </section>
 
       <footer className="landing-footer">
