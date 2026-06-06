@@ -1,8 +1,24 @@
 import { useLeaderboard, useMyRank } from "../hooks/usePredictions";
 import { useCurrentUser } from "../hooks/useUser";
 
+type LeaderboardBadge = {
+  slug: string;
+  icon: string;
+};
+
+type LeaderboardEntry = {
+  rank: number;
+  user_id: number;
+  display_name: string;
+  avatar_url: string | null;
+  total_points: number;
+  accuracy: number;
+  login_streak: number;
+  badges: LeaderboardBadge[];
+};
+
 export default function Leaderboard() {
-  const { data: board = [] } = useLeaderboard();
+  const { data: board = [] } = useLeaderboard() as { data?: LeaderboardEntry[] };
   const { data: myRank } = useMyRank();
   const { data: user } = useCurrentUser();
 
@@ -26,7 +42,7 @@ export default function Leaderboard() {
           <span>Streak</span>
           <span>Badges</span>
         </div>
-        {board.map((entry: any) => (
+        {board.map((entry) => (
           <div
             key={entry.user_id}
             className={`lb-row ${entry.user_id === user?.id ? "lb-me" : ""}`}
@@ -42,7 +58,7 @@ export default function Leaderboard() {
             <span className="lb-acc">{entry.accuracy}%</span>
             <span className="lb-streak">🔥{entry.login_streak}</span>
             <span className="lb-badges">
-              {entry.badges.slice(0, 3).map((b: any) => (
+              {entry.badges.slice(0, 3).map((b) => (
                 <span key={b.slug} title={b.slug}>{b.icon}</span>
               ))}
             </span>

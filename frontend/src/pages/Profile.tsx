@@ -2,25 +2,56 @@ import { useCurrentUser, useNotifications } from "../hooks/useUser";
 import { usePredictions } from "../hooks/usePredictions";
 import { useAuth } from "@clerk/clerk-react";
 import axios from "axios";
+import { apiPath } from "../lib/api";
+
+type FavoriteTeam = {
+  id: number;
+  name: string;
+  abbreviation: string;
+};
+
+type Badge = {
+  slug: string;
+  name: string;
+  icon: string;
+};
+
+type Notification = {
+  id: number;
+  title: string;
+  body: string;
+  read: boolean;
+};
+
+type Prediction = {
+  id: number;
+  resolved_at: string | null;
+  is_correct: boolean | null;
+  points_earned: number;
+  game?: {
+    home_team: string | null;
+    away_team: string | null;
+  } | null;
+};
 
 export default function Profile() {
   const { data: user, isLoading } = useCurrentUser();
-  const { data: predictions = [] } = usePredictions();
-  const { data: notifs = [] } = useNotifications();
+  const { data: predictions = [] } = usePredictions() as { data?: Prediction[] };
+  const { data: notifs = [] } = useNotifications() as { data?: Notification[] };
   const { getToken } = useAuth();
 
   async function markRead(id: number) {
     const token = await getToken();
-    await axios.post(`/api/users/me/notifications/${id}/read`, {}, { headers: { Authorization: `Bearer ${token}` } });
+    await axios.post(apiPath(`/api/users/me/notifications/${id}/read`), {}, { headers: { Authorization: `Bearer ${token}` } });
   }
 
   if (isLoading) return <div className="page-center">Loading profile…</div>;
   if (!user) return null;
 
   const badges = user.badges ?? [];
-  const unread = notifs.filter((n: any) => !n.read);
-  const resolved = predictions.filter((p: any) => p.resolved_at);
-  const correct = resolved.filter((p: any) => p.is_correct).length;
+  const unread = notifs.filter((n) => !n.read);
+  const resolved = predictions.filter((p) => p.resolved_at);
+  const correct = resolved.filter((p) => p.is_correct).length;
 
   return (
     <div className="page-profile">
@@ -42,7 +73,7 @@ export default function Profile() {
         <section className="profile-section">
           <h3>My Teams</h3>
           <div className="team-chips-row">
-            {user.favorite_teams.map((t: any) => (
+            {(user.favorite_teams as FavoriteTeam[]).map((t) => (
               <span key={t.id} className="team-chip selected">
                 <span className="chip-abbr">{t.abbreviation}</span>
                 <span className="chip-name">{t.name}</span>
@@ -59,7 +90,7 @@ export default function Profile() {
           <p className="empty-state">No badges yet — make predictions and log in daily to earn them!</p>
         ) : (
           <div className="badges-grid">
-            {badges.map((b: any) => (
+            {(badges as Badge[]).map((b) => (
               <div key={b.slug} className="badge-card">
                 <span className="badge-icon">{b.icon}</span>
                 <span className="badge-name">{b.name}</span>
@@ -76,7 +107,7 @@ export default function Profile() {
           <p className="empty-state">No resolved predictions yet.</p>
         ) : (
           <div className="history-list">
-            {resolved.slice(0, 8).map((p: any) => (
+            {resolved.slice(0, 8).map((p) => (
               <div key={p.id} className={`history-item ${p.is_correct ? "correct" : "incorrect"}`}>
                 <span>{p.is_correct ? "✅" : "❌"}</span>
                 <span>{p.game?.away_team} @ {p.game?.home_team}</span>
@@ -92,7 +123,7 @@ export default function Profile() {
         <section className="profile-section">
           <h3>Notifications {unread.length > 0 ? `(${unread.length} unread)` : ""}</h3>
           <div className="notif-list">
-            {notifs.slice(0, 10).map((n: any) => (
+            {notifs.slice(0, 10).map((n) => (
               <div key={n.id} className={`notif-item ${n.read ? "" : "unread"}`} onClick={() => !n.read && markRead(n.id)}>
                 <strong>{n.title}</strong>
                 <p>{n.body}</p>

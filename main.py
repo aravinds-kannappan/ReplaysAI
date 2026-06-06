@@ -9,14 +9,16 @@ from api.leaderboards import router as leaderboard_router
 from api.predictions import router as predictions_router
 from api.rankings import router as rankings_router
 from api.recaps import router as recaps_router
+from config import get_settings
 from db.models import Badge, Base
 from db.session import get_engine, get_session_factory
 
 app = FastAPI(title="Replays AI", version="2.0.0")
+settings = get_settings()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

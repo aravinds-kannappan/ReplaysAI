@@ -69,6 +69,25 @@ def get_rankings(sport: Optional[str] = Query(None), db: Session = Depends(get_d
     return result
 
 
+@router.get("/teams")
+def get_teams(sport: Optional[str] = Query(None), db: Session = Depends(get_db)):
+    q = db.query(Team)
+    if sport:
+        q = q.filter(Team.sport == sport.upper())
+    teams = q.order_by(Team.sport, Team.name).all()
+    return [
+        {
+            "id": team.id,
+            "name": team.name,
+            "abbreviation": team.abbreviation,
+            "sport": team.sport,
+            "conference": team.conference,
+            "division": team.division,
+        }
+        for team in teams
+    ]
+
+
 @router.get("/players/{player_id}")
 def get_player(player_id: int, db: Session = Depends(get_db)):
     from db.models import Player, Play

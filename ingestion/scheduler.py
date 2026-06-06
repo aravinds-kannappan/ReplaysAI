@@ -3,7 +3,7 @@ Live refresh scheduler — runs continuously after backfill is complete.
 Only handles live / upcoming games (not historical).
 
 Usage:
-  python -m backend.ingestion.scheduler
+  python -m ingestion.scheduler
 
 Polls every 60s during game hours, 5min otherwise.
 """

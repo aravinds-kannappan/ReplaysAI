@@ -6,8 +6,8 @@ Two modes:
   • run_live_refresh()         – updates today's / in-progress games only
 
 Run directly:
-  python -m backend.ingestion.nba_ingester --mode backfill --seasons 5
-  python -m backend.ingestion.nba_ingester --mode live
+  python -m ingestion.nba_ingester --mode backfill --seasons 5
+  python -m ingestion.nba_ingester --mode live
 """
 import argparse
 import time

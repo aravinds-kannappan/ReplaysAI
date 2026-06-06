@@ -10,6 +10,9 @@ alembic==1.13.3
 # Cache
 redis==5.1.1
 
+# Auth
+PyJWT==2.10.1
+
 # Sports data
 nba_api==1.4.0
 requests==2.32.3

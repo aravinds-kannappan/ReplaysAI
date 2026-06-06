@@ -2,12 +2,11 @@
 seed_data.py — Master backfill script for Replays AI.
 
 Usage:
-  python -m backend.ingestion.seed_data               # all sports, 5 seasons
-  python -m backend.ingestion.seed_data --sport nba   # NBA only
-  python -m backend.ingestion.seed_data --sport nfl   # NFL only
-  python -m backend.ingestion.seed_data --seasons 2   # last 2 seasons
-  python -m backend.ingestion.seed_data --metadata-only  # games only, no plays
-  python -m backend.ingestion.seed_data --resume      # skip games with plays
+  python -m ingestion.seed_data               # all sports, 5 seasons
+  python -m ingestion.seed_data --sport nba   # NBA only
+  python -m ingestion.seed_data --sport nfl   # NFL only
+  python -m ingestion.seed_data --seasons 2   # last 2 seasons
+  python -m ingestion.seed_data --metadata-only  # games only, no plays
 
 Backfill is fully idempotent — safe to run again after a crash.
 Progress bars show real-time status via tqdm.

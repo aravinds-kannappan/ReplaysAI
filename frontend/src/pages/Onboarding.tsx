@@ -1,24 +1,16 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import axios from "axios";
+import { apiPath } from "../lib/api";
 import { useCurrentUser, useAddFavoriteTeam, useRemoveFavoriteTeam } from "../hooks/useUser";
 
-const NBA_TEAMS = [
-  { id: 1, abbr: "ATL", name: "Hawks" }, { id: 2, abbr: "BOS", name: "Celtics" },
-  { id: 3, abbr: "BKN", name: "Nets" }, { id: 4, abbr: "CHA", name: "Hornets" },
-  { id: 5, abbr: "CHI", name: "Bulls" }, { id: 6, abbr: "CLE", name: "Cavaliers" },
-  { id: 7, abbr: "DAL", name: "Mavericks" }, { id: 8, abbr: "DEN", name: "Nuggets" },
-  { id: 9, abbr: "DET", name: "Pistons" }, { id: 10, abbr: "GSW", name: "Warriors" },
-  { id: 11, abbr: "HOU", name: "Rockets" }, { id: 12, abbr: "IND", name: "Pacers" },
-  { id: 13, abbr: "LAC", name: "Clippers" }, { id: 14, abbr: "LAL", name: "Lakers" },
-  { id: 15, abbr: "MEM", name: "Grizzlies" }, { id: 16, abbr: "MIA", name: "Heat" },
-  { id: 17, abbr: "MIL", name: "Bucks" }, { id: 18, abbr: "MIN", name: "Wolves" },
-  { id: 19, abbr: "NOP", name: "Pelicans" }, { id: 20, abbr: "NYK", name: "Knicks" },
-  { id: 21, abbr: "OKC", name: "Thunder" }, { id: 22, abbr: "ORL", name: "Magic" },
-  { id: 23, abbr: "PHI", name: "76ers" }, { id: 24, abbr: "PHX", name: "Suns" },
-  { id: 25, abbr: "POR", name: "Blazers" }, { id: 26, abbr: "SAC", name: "Kings" },
-  { id: 27, abbr: "SAS", name: "Spurs" }, { id: 28, abbr: "TOR", name: "Raptors" },
-  { id: 29, abbr: "UTA", name: "Jazz" }, { id: 30, abbr: "WAS", name: "Wizards" },
-];
+type Team = {
+  id: number;
+  abbreviation: string;
+  name: string;
+  sport: string;
+};
 
 export default function Onboarding() {
   const navigate = useNavigate();
@@ -26,10 +18,13 @@ export default function Onboarding() {
   const addTeam = useAddFavoriteTeam();
   const removeTeam = useRemoveFavoriteTeam();
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [step, setStep] = useState(1);
+  const { data: teams = [] } = useQuery<Team[]>({
+    queryKey: ["teams", "NBA"],
+    queryFn: () => axios.get(apiPath("/api/teams"), { params: { sport: "NBA" } }).then((r) => r.data),
+  });
 
-  // Use actual DB team IDs if available (fallback to local list ordering)
-  const favTeamIds = new Set((user?.favorite_teams ?? []).map((t: { id: number }) => t.id));
+  const favoriteTeams = (user?.favorite_teams ?? []) as { id: number }[];
+  const favTeamIds = new Set<number>(favoriteTeams.map((t) => t.id));
   const activeIds = selected.size > 0 ? selected : favTeamIds;
 
   function toggleTeam(id: number) {
@@ -67,19 +62,16 @@ export default function Onboarding() {
       <div className="team-section">
         <h3>NBA</h3>
         <div className="team-grid">
-          {NBA_TEAMS.map((t) => {
-            // Try to match by abbreviation from actual DB teams
-            const dbTeam = (user?.favorite_teams ?? []).find((ft: { abbreviation: string }) => ft.abbreviation === t.abbr);
-            const dbId = dbTeam?.id ?? t.id;
-            const isSelected = activeIds.has(dbId) || favTeamIds.has(dbId);
+          {teams.map((team) => {
+            const isSelected = activeIds.has(team.id) || favTeamIds.has(team.id);
             return (
               <button
-                key={t.abbr}
+                key={team.id}
                 className={`team-chip ${isSelected ? "selected" : ""}`}
-                onClick={() => toggleTeam(dbId)}
+                onClick={() => toggleTeam(team.id)}
               >
-                <span className="chip-abbr">{t.abbr}</span>
-                <span className="chip-name">{t.name}</span>
+                <span className="chip-abbr">{team.abbreviation}</span>
+                <span className="chip-name">{team.name}</span>
               </button>
             );
           })}

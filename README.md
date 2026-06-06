@@ -253,6 +253,42 @@ npm run dev
 
 ---
 
+## Vercel Deployment Notes
+
+This repository contains both a Vite frontend and a FastAPI backend. The included
+`vercel.json` builds `frontend/` and routes `/api/*` requests to the FastAPI app
+through `api/index.py`.
+
+Set these environment variables in Vercel before deploying:
+
+Backend:
+- `DATABASE_URL` — hosted PostgreSQL connection string. Vercel cannot use the
+  local `localhost` Postgres default.
+- `REDIS_URL` — hosted Redis connection string.
+- `CLERK_SECRET_KEY` — Clerk backend secret for JWT verification.
+- `ANTHROPIC_API_KEY` — required for recap/CV/fan-perspective generation.
+- `YOUTUBE_API_KEY` — optional but recommended for highlight video discovery.
+- `ALLOWED_ORIGINS` — comma-separated frontend origins, for example
+  `https://your-app.vercel.app,http://localhost:5173`.
+
+Frontend:
+- `VITE_CLERK_PUBLISHABLE_KEY` — Clerk publishable key.
+- `VITE_API_BASE_URL` — leave empty when using the same Vercel deployment for
+  frontend and backend. Set this only if the API is deployed on another host.
+
+The sports data is real ESPN data, but the app will show empty lists until the
+database has been seeded. Run the backfill against your hosted database:
+
+```bash
+DATABASE_URL="postgresql://..." REDIS_URL="redis://..." python -m ingestion.seed_data --sport nba --seasons 1
+```
+
+Then run `python -m ingestion.scheduler` from a long-running worker environment
+for live refreshes. Vercel serverless functions are not a good place for the
+continuous scheduler loop.
+
+---
+
 ## Environment Variables
 
 Backend (`.env`):
@@ -264,12 +300,14 @@ Backend (`.env`):
 | `DATABASE_URL` | Yes | PostgreSQL connection string |
 | `REDIS_URL` | Yes | Redis connection string |
 | `YOUTUBE_API_KEY` | Optional | YouTube Data API v3 key |
+| `ALLOWED_ORIGINS` | Yes in production | Comma-separated allowed frontend origins |
 
 Frontend (`frontend/.env.local`):
 
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `VITE_CLERK_PUBLISHABLE_KEY` | Yes | Clerk publishable key |
+| `VITE_API_BASE_URL` | Optional | API origin if backend is deployed separately |
 
 ---
 

@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@clerk/clerk-react";
 import axios from "axios";
+import { apiPath } from "../lib/api";
 import { useGame } from "../hooks/useGames";
 import { useCurrentUser } from "../hooks/useUser";
 import { useCreatePrediction } from "../hooks/usePredictions";
@@ -15,7 +16,7 @@ type Tab = "recap" | "fan" | "highlights" | "plays";
 async function authFetch(getToken: () => Promise<string | null>, url: string, options: Record<string, unknown> = {}) {
   const token = await getToken();
   const headers = token ? { Authorization: `Bearer ${token}` } : {};
-  const res = await axios({ url, headers, ...options });
+  const res = await axios({ url: apiPath(url), headers, ...options });
   return res.data;
 }
 

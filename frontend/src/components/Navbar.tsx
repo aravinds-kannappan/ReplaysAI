@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { SignedIn, SignedOut, UserButton, useAuth } from "@clerk/clerk-react";
+import { SignedIn, SignedOut, UserButton } from "@clerk/clerk-react";
 import { useNotifications } from "../hooks/useUser";
 
 export default function Navbar() {

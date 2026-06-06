@@ -6,8 +6,8 @@ Two modes:
   • run_live_refresh()         – updates current week's games only
 
 Run directly:
-  python -m backend.ingestion.nfl_ingester --mode backfill --seasons 5
-  python -m backend.ingestion.nfl_ingester --mode live
+  python -m ingestion.nfl_ingester --mode backfill --seasons 5
+  python -m ingestion.nfl_ingester --mode live
 """
 import argparse
 import time

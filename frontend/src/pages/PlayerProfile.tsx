@@ -1,8 +1,7 @@
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
-
-const API = "";
+import { apiPath } from "../lib/api";
 
 interface PlayerData {
   id: number;
@@ -18,7 +17,7 @@ export default function PlayerProfile() {
   const { id } = useParams<{ id: string }>();
   const { data: player, isLoading } = useQuery<PlayerData>({
     queryKey: ["player", id],
-    queryFn: () => axios.get(`${API}/api/players/${id}`).then((r) => r.data),
+    queryFn: () => axios.get(apiPath(`/api/players/${id}`)).then((r) => r.data),
   });
 
   if (isLoading) return <div className="page-center">Loading player…</div>;

@@ -3,12 +3,27 @@ import { useRosters, useRosterPlayers, useSaveRoster } from "../hooks/usePredict
 
 const MAX_PLAYERS = 8;
 
+type RosterPlayer = {
+  id: number;
+  name: string;
+  position: string | null;
+  team: string | null;
+  impact_score: number;
+};
+
+type Roster = {
+  sport: string;
+  player_ids?: number[];
+  total_points: number;
+  locked: boolean;
+};
+
 export default function RosterBuilder() {
   const [sport, setSport] = useState("NBA");
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [saved, setSaved] = useState(false);
-  const { data: players = [], isLoading } = useRosterPlayers(sport);
-  const { data: rosters = [] } = useRosters();
+  const { data: players = [], isLoading } = useRosterPlayers(sport) as { data?: RosterPlayer[]; isLoading: boolean };
+  const { data: rosters = [] } = useRosters() as { data?: Roster[] };
   const saveRoster = useSaveRoster();
 
   function toggle(id: number) {
@@ -23,7 +38,7 @@ export default function RosterBuilder() {
     setSaved(true);
   }
 
-  const currentWeekRoster = rosters.find((r: any) => r.sport === sport);
+  const currentWeekRoster = rosters.find((r) => r.sport === sport);
 
   return (
     <div className="page-roster">
@@ -50,7 +65,7 @@ export default function RosterBuilder() {
         <div className="players-list">
           <h3>Available Players</h3>
           {isLoading && <p className="loading-text">Loading players…</p>}
-          {players.map((p: any) => {
+          {players.map((p) => {
             const isSelected = selectedIds.includes(p.id);
             const canSelect = isSelected || selectedIds.length < MAX_PLAYERS;
             return (
@@ -76,7 +91,7 @@ export default function RosterBuilder() {
           ) : (
             <div className="my-picks">
               {selectedIds.map((id) => {
-                const p = players.find((pl: any) => pl.id === id);
+                const p = players.find((pl) => pl.id === id);
                 return p ? (
                   <div key={id} className="pick-item">
                     <span>{p.name}</span>

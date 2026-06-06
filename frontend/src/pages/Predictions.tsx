@@ -2,7 +2,32 @@ import { useState } from "react";
 import { usePredictions, useUpcomingGames, useCreatePrediction } from "../hooks/usePredictions";
 import { useCurrentUser } from "../hooks/useUser";
 
-function PredictionCard({ game, onPick }: { game: any; onPick: (winnerId: number) => void }) {
+type PredictionTeam = {
+  id: number;
+  name: string | null;
+};
+
+type UpcomingGame = {
+  id: number;
+  sport: string;
+  game_date: string | null;
+  home_team: PredictionTeam;
+  away_team: PredictionTeam;
+  already_predicted: boolean;
+};
+
+type PredictionHistory = {
+  id: number;
+  is_correct: boolean | null;
+  predicted_winner_name: string | null;
+  points_earned: number;
+  game?: {
+    home_team: string | null;
+    away_team: string | null;
+  } | null;
+};
+
+function PredictionCard({ game, onPick }: { game: UpcomingGame; onPick: (winnerId: number) => void }) {
   const [picked, setPicked] = useState<number | null>(null);
   const [submitted, setSubmitted] = useState(game.already_predicted);
 
@@ -44,8 +69,8 @@ function PredictionCard({ game, onPick }: { game: any; onPick: (winnerId: number
 
 export default function Predictions() {
   const { data: user } = useCurrentUser();
-  const { data: upcoming = [] } = useUpcomingGames();
-  const { data: history = [] } = usePredictions("resolved");
+  const { data: upcoming = [] } = useUpcomingGames() as { data?: UpcomingGame[] };
+  const { data: history = [] } = usePredictions("resolved") as { data?: PredictionHistory[] };
   const createPrediction = useCreatePrediction();
 
   const accuracy = user ? user.prediction_accuracy : 0;
@@ -81,7 +106,7 @@ export default function Predictions() {
           <p className="empty-state">No upcoming games to predict right now. Check back later.</p>
         ) : (
           <div className="pred-grid">
-            {upcoming.map((g: any) => (
+            {upcoming.map((g) => (
               <PredictionCard key={g.id} game={g} onPick={(wid) => handlePick(g.id, wid)} />
             ))}
           </div>
@@ -92,7 +117,7 @@ export default function Predictions() {
         <section className="pred-section">
           <h3>Past Picks</h3>
           <div className="history-list">
-            {history.slice(0, 10).map((p: any) => (
+            {history.slice(0, 10).map((p) => (
               <div key={p.id} className={`history-item ${p.is_correct ? "correct" : "incorrect"}`}>
                 <span className="history-result">{p.is_correct ? "✅" : "❌"}</span>
                 <span className="history-game">{p.game?.away_team} @ {p.game?.home_team}</span>
