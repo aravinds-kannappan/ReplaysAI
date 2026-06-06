@@ -18,9 +18,15 @@ export default function Onboarding() {
   const addTeam = useAddFavoriteTeam();
   const removeTeam = useRemoveFavoriteTeam();
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const { data: teams = [] } = useQuery<Team[]>({
+
+  const { data: nbaTeams = [], isLoading: nbaLoading } = useQuery<Team[]>({
     queryKey: ["teams", "NBA"],
     queryFn: () => axios.get(apiPath("/api/teams"), { params: { sport: "NBA" } }).then((r) => r.data),
+  });
+
+  const { data: nflTeams = [], isLoading: nflLoading } = useQuery<Team[]>({
+    queryKey: ["teams", "NFL"],
+    queryFn: () => axios.get(apiPath("/api/teams"), { params: { sport: "NFL" } }).then((r) => r.data),
   });
 
   const favoriteTeams = (user?.favorite_teams ?? []) as { id: number }[];
@@ -30,7 +36,6 @@ export default function Onboarding() {
   function toggleTeam(id: number) {
     setSelected((prev) => {
       const next = new Set(prev);
-      // Sync from user data first
       favTeamIds.forEach((tid) => next.add(tid));
       if (next.has(id)) {
         next.delete(id);
@@ -43,8 +48,33 @@ export default function Onboarding() {
     });
   }
 
-  async function finish() {
-    navigate("/feed");
+  function TeamSection({ title, emoji, teams, loading }: { title: string; emoji: string; teams: Team[]; loading: boolean }) {
+    return (
+      <div className="team-section">
+        <h3>{emoji} {title}</h3>
+        {loading ? (
+          <p className="loading-text">Loading teams…</p>
+        ) : teams.length === 0 ? (
+          <p className="empty-state">No teams found.</p>
+        ) : (
+          <div className="team-grid">
+            {teams.map((team) => {
+              const isSelected = activeIds.has(team.id) || favTeamIds.has(team.id);
+              return (
+                <button
+                  key={team.id}
+                  className={`team-chip ${isSelected ? "selected" : ""}`}
+                  onClick={() => toggleTeam(team.id)}
+                >
+                  <span className="chip-abbr">{team.abbreviation}</span>
+                  <span className="chip-name">{team.name}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -59,34 +89,22 @@ export default function Onboarding() {
         </div>
       </div>
 
-      <div className="team-section">
-        <h3>NBA</h3>
-        <div className="team-grid">
-          {teams.map((team) => {
-            const isSelected = activeIds.has(team.id) || favTeamIds.has(team.id);
-            return (
-              <button
-                key={team.id}
-                className={`team-chip ${isSelected ? "selected" : ""}`}
-                onClick={() => toggleTeam(team.id)}
-              >
-                <span className="chip-abbr">{team.abbreviation}</span>
-                <span className="chip-name">{team.name}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      <TeamSection title="NBA Teams" emoji="🏀" teams={nbaTeams} loading={nbaLoading} />
+      <TeamSection title="NFL Teams" emoji="🏈" teams={nflTeams} loading={nflLoading} />
 
       <div className="onboarding-footer">
         <button
           className="btn-hero-primary"
-          onClick={finish}
+          onClick={() => navigate("/feed")}
           disabled={activeIds.size === 0}
         >
-          {activeIds.size === 0 ? "Pick at least one team" : `Continue with ${activeIds.size} team${activeIds.size > 1 ? "s" : ""} →`}
+          {activeIds.size === 0
+            ? "Pick at least one team"
+            : `Continue with ${activeIds.size} team${activeIds.size > 1 ? "s" : ""} →`}
         </button>
-        <button className="btn-ghost" onClick={finish}>Skip for now</button>
+        <button className="btn-ghost" onClick={() => navigate("/feed")}>
+          Skip for now
+        </button>
       </div>
     </div>
   );

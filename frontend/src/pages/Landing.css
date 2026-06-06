@@ -670,6 +670,424 @@
   animation: badge-pop 0.5s ease both;
 }
 
+/* ── Mock game card (hero preview) ────────────────────────── */
+.hero-preview-wrap {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  justify-content: center;
+  margin-top: 48px;
+  margin-bottom: 16px;
+}
+
+.mock-card {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 20px;
+  padding: 24px 28px;
+  max-width: 420px;
+  width: 100%;
+  backdrop-filter: blur(20px);
+  box-shadow: 0 24px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
+  animation: card-float 6s ease-in-out infinite;
+  text-align: left;
+}
+
+.mock-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.mock-sport-badge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: rgba(255,255,255,0.5);
+  letter-spacing: 0.05em;
+}
+
+.mock-status {
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 3px 8px;
+  border-radius: 100px;
+  text-transform: uppercase;
+}
+.mock-status.final {
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.4);
+  border: 1px solid rgba(255,255,255,0.12);
+}
+
+.mock-card-teams {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.mock-team {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.mock-abbr {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: rgba(255,255,255,0.5);
+  letter-spacing: 0.05em;
+}
+
+.mock-score {
+  font-size: 2.4rem;
+  font-weight: 900;
+  color: rgba(255,255,255,0.35);
+  line-height: 1;
+}
+
+.mock-score.winner {
+  color: #f59e0b;
+  text-shadow: 0 0 20px rgba(245,158,11,0.4);
+}
+
+.mock-vs {
+  font-size: 0.8rem;
+  color: rgba(255,255,255,0.2);
+  font-weight: 700;
+}
+
+.mock-recap-preview {
+  font-size: 0.8rem;
+  color: rgba(255,255,255,0.45);
+  line-height: 1.6;
+  font-style: italic;
+  border-left: 2px solid rgba(139,92,246,0.5);
+  padding-left: 12px;
+  margin-bottom: 16px;
+}
+
+.mock-card-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.mock-action-btn {
+  flex: 1;
+  text-align: center;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: default;
+}
+
+.mock-action-btn.purple {
+  background: rgba(139,92,246,0.15);
+  color: #c4b5fd;
+  border: 1px solid rgba(139,92,246,0.3);
+}
+
+.mock-action-btn.orange {
+  background: rgba(224,92,26,0.15);
+  color: #f59e0b;
+  border: 1px solid rgba(224,92,26,0.3);
+}
+
+/* ── Sports coverage banner ───────────────────────────────── */
+.sports-banner {
+  position: relative;
+  z-index: 2;
+  padding: 20px 32px;
+  margin: 0 0 20px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.02);
+}
+
+.sports-banner-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.sports-label-text {
+  color: rgba(255,255,255,0.35);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.sport-badge-pill {
+  padding: 6px 16px;
+  border-radius: 100px;
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+
+.sport-badge-pill.nba {
+  background: rgba(59,130,246,0.15);
+  color: #93c5fd;
+  border: 1px solid rgba(59,130,246,0.35);
+}
+
+.sport-badge-pill.nfl {
+  background: rgba(224,92,26,0.15);
+  color: #fca98d;
+  border: 1px solid rgba(224,92,26,0.35);
+}
+
+.sports-and {
+  color: rgba(255,255,255,0.25);
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+/* ── Section subtitle ─────────────────────────────────────── */
+.section-sub {
+  color: rgba(255,255,255,0.45);
+  font-size: 0.95rem;
+  line-height: 1.7;
+  max-width: 620px;
+  margin: 0 auto 48px;
+  text-align: center;
+}
+
+.inline-code {
+  font-family: "SF Mono", "Fira Code", monospace;
+  font-size: 0.85em;
+  background: rgba(139,92,246,0.15);
+  color: #c4b5fd;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(139,92,246,0.25);
+}
+
+/* ── 6-card feature grid ──────────────────────────────────── */
+.features-grid-6 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+@media (max-width: 900px) {
+  .features-grid-6 { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 580px) {
+  .features-grid-6 { grid-template-columns: 1fr; }
+}
+
+.feat-card {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 18px;
+  padding: 24px;
+  transition: border-color 0.2s, transform 0.2s;
+}
+
+.feat-card:hover {
+  transform: translateY(-3px);
+}
+
+.feat-card.accent-orange { border-color: rgba(224,92,26,0.2); }
+.feat-card.accent-orange:hover { border-color: rgba(224,92,26,0.5); }
+.feat-card.accent-purple { border-color: rgba(139,92,246,0.2); }
+.feat-card.accent-purple:hover { border-color: rgba(139,92,246,0.5); }
+.feat-card.accent-pink { border-color: rgba(236,72,153,0.2); }
+.feat-card.accent-pink:hover { border-color: rgba(236,72,153,0.5); }
+.feat-card.accent-blue { border-color: rgba(59,130,246,0.2); }
+.feat-card.accent-blue:hover { border-color: rgba(59,130,246,0.5); }
+.feat-card.accent-green { border-color: rgba(16,185,129,0.2); }
+.feat-card.accent-green:hover { border-color: rgba(16,185,129,0.5); }
+
+.feat-icon {
+  display: block;
+  font-size: 1.8rem;
+  margin-bottom: 12px;
+}
+
+.feat-card h3 {
+  font-size: 1rem;
+  font-weight: 800;
+  color: #fff;
+  margin-bottom: 10px;
+}
+
+.feat-card p {
+  font-size: 0.82rem;
+  color: rgba(255,255,255,0.45);
+  line-height: 1.65;
+  margin-bottom: 16px;
+}
+
+.feat-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.feat-tag {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 100px;
+  background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.45);
+  border: 1px solid rgba(255,255,255,0.1);
+  font-family: "SF Mono", "Fira Code", monospace;
+}
+
+/* ── Pipeline section ─────────────────────────────────────── */
+.pipeline-section {
+  position: relative;
+  z-index: 2;
+  padding: 0 32px 100px;
+  text-align: center;
+}
+
+.pipeline-section h2 {
+  font-size: clamp(1.8rem, 3.5vw, 2.6rem);
+  font-weight: 900;
+  letter-spacing: -1px;
+  color: #fff;
+  margin-bottom: 16px;
+}
+
+/* ── Points & Badges section ──────────────────────────────── */
+.points-section {
+  position: relative;
+  z-index: 2;
+  padding: 0 32px 100px;
+}
+
+.points-inner {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 48px;
+  max-width: 960px;
+  margin: 0 auto;
+  align-items: center;
+}
+
+@media (max-width: 700px) {
+  .points-inner { grid-template-columns: 1fr; }
+}
+
+.points-left .section-label { margin-bottom: 12px; }
+
+.points-left h2 {
+  font-size: clamp(1.6rem, 3vw, 2.2rem);
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: -0.5px;
+  margin-bottom: 16px;
+}
+
+.points-left p {
+  color: rgba(255,255,255,0.45);
+  font-size: 0.9rem;
+  line-height: 1.7;
+  margin-bottom: 24px;
+}
+
+.badges-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.badge-chip {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 5px 12px;
+  border-radius: 100px;
+  background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.6);
+  border: 1px solid rgba(255,255,255,0.12);
+}
+
+.points-table-card {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 18px;
+  overflow: hidden;
+}
+
+.points-table-header {
+  padding: 14px 20px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.3);
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  background: rgba(255,255,255,0.02);
+}
+
+.points-row-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  font-size: 0.85rem;
+  color: rgba(255,255,255,0.6);
+}
+
+.points-row-item:last-child { border-bottom: none; }
+
+.pts-val {
+  color: #f59e0b;
+  font-weight: 800;
+  font-size: 0.9rem;
+}
+
+/* ── Tech stack section ───────────────────────────────────── */
+.tech-section {
+  position: relative;
+  z-index: 2;
+  padding: 0 32px 100px;
+  text-align: center;
+}
+
+.tech-section h2 {
+  font-size: clamp(1.6rem, 3vw, 2.2rem);
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: -0.5px;
+  margin-bottom: 16px;
+}
+
+.tech-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.tech-chip {
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 7px 16px;
+  border-radius: 100px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid;
+  font-family: "SF Mono", "Fira Code", monospace;
+  letter-spacing: 0.02em;
+  transition: background 0.15s;
+}
+
+.tech-chip:hover { background: rgba(255,255,255,0.08); }
+
 /* ── Footer ───────────────────────────────────────────────── */
 .landing-footer {
   position: relative;
