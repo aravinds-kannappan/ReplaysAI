@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { apiPath } from "../lib/api";
-import { useCurrentUser, useAddFavoriteTeam, useRemoveFavoriteTeam } from "../hooks/useUser";
+import { useCurrentUser, useAddFavoriteTeam } from "../hooks/useUser";
 
 type Team = {
   id: number;
@@ -38,8 +38,8 @@ export default function Onboarding() {
   const navigate = useNavigate();
   const { data: user } = useCurrentUser();
   const addTeam = useAddFavoriteTeam();
-  const removeTeam = useRemoveFavoriteTeam();
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [saving, setSaving] = useState(false);
 
   const { data: nbaTeams = [], isLoading: nbaLoading } = useQuery<Team[]>({
     queryKey: ["teams", "NBA"],
@@ -63,13 +63,25 @@ export default function Onboarding() {
       favTeamIds.forEach((tid) => next.add(tid));
       if (next.has(id)) {
         next.delete(id);
-        removeTeam.mutate(id);
       } else {
         next.add(id);
-        addTeam.mutate(id);
       }
       return next;
     });
+  }
+
+  async function continueToFeed() {
+    const ids = Array.from(activeIds);
+    if (!ids.length) return;
+    setSaving(true);
+    window.localStorage.setItem("replaysai:onboarded", "true");
+    window.localStorage.setItem("replaysai:teamIds", JSON.stringify(ids));
+    try {
+      await Promise.all(ids.map((id) => addTeam.mutateAsync(id)));
+    } finally {
+      setSaving(false);
+      navigate("/feed");
+    }
   }
 
   function TeamSection({ title, emoji, teams, loading }: { title: string; emoji: string; teams: Team[]; loading: boolean }) {
@@ -104,8 +116,9 @@ export default function Onboarding() {
   return (
     <div className="onboarding-page">
       <div className="onboarding-header">
-        <h1>Pick your teams</h1>
-        <p>We'll personalize your feed, recaps, and predictions around them.</p>
+        <p className="dashboard-kicker">Personalization survey</p>
+        <h1>Who should ReplaysAI follow for you?</h1>
+        <p>Select NBA and NFL teams once. Agents use this to retrieve schedules, players, reels, predictions, and fantasy context.</p>
         <div className="onboarding-steps">
           <span className="step active">1. Choose Teams</span>
           <span className="step-arrow">→</span>
@@ -119,15 +132,14 @@ export default function Onboarding() {
       <div className="onboarding-footer">
         <button
           className="btn-hero-primary"
-          onClick={() => navigate("/feed")}
-          disabled={activeIds.size === 0}
+          onClick={continueToFeed}
+          disabled={activeIds.size === 0 || saving}
         >
-          {activeIds.size === 0
+          {saving
+            ? "Activating agents..."
+            : activeIds.size === 0
             ? "Pick at least one team"
             : `Continue with ${activeIds.size} team${activeIds.size > 1 ? "s" : ""} →`}
-        </button>
-        <button className="btn-ghost" onClick={() => navigate("/feed")}>
-          Skip for now
         </button>
       </div>
     </div>

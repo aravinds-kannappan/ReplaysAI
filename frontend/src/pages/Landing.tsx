@@ -10,6 +10,11 @@ export default function Landing() {
     <main className="landing-v2">
       <section className="arena-hero">
         <div className="arena-copy">
+          <div className="brand-lockup">
+            <img src="/replaysai-logo.svg" alt="" />
+            <span>ReplaysAI</span>
+          </div>
+          <div className="yc-pill">Built for YC-style sports intelligence</div>
           <p className="arena-kicker">Live sports, rebuilt around your teams</p>
           <h1>Every game becomes your own broadcast.</h1>
           <p>
@@ -59,6 +64,28 @@ export default function Landing() {
           <span>03</span>
           <strong>Watch smarter</strong>
           <p>Choose short, medium, or explained reels and carry the insight into picks and fantasy.</p>
+        </div>
+      </section>
+
+      <section className="vision-sections">
+        <div className="vision-copy">
+          <span>Computer Vision</span>
+          <h2>From full game to personal reel.</h2>
+          <p>Choose a two-minute pulse check, a five-minute story, or a ten-minute explained cut after every live game.</p>
+        </div>
+        <div className="film-strip">
+          {["Frame 0142", "Dunk", "Crowd shift", "Defining run"].map((item) => <b key={item}>{item}</b>)}
+        </div>
+      </section>
+
+      <section className="vision-sections reverse">
+        <div className="vision-copy">
+          <span>Personalization</span>
+          <h2>One survey starts the whole product.</h2>
+          <p>Pick teams once. ReplaysAI builds the feed, reels, picks, roster battles, and leaderboard context around that graph.</p>
+        </div>
+        <div className="team-constellation">
+          {["LAL", "BOS", "KC", "BUF", "DAL", "NYK"].map((team) => <b key={team}>{team}</b>)}
         </div>
       </section>
     </main>

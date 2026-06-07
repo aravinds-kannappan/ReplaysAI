@@ -11,6 +11,7 @@ export default function Navbar() {
   return (
     <nav className={`navbar ${isLanding ? "navbar-transparent" : ""}`}>
       <Link to="/" className="navbar-logo">
+        <img src="/replaysai-logo.svg" alt="" />
         Replays<span>AI</span>
       </Link>
 

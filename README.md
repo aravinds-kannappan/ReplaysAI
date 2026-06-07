@@ -27,6 +27,33 @@ Replays AI closes this gap by ingesting structured play-by-play data, aligning i
 
 ---
 
+## API / Environment Requirements
+
+Required for production:
+
+| Service | Env var | Why |
+|---------|---------|-----|
+| Clerk | `VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` | Sign in, protected routes, user profiles, team survey |
+| Database | `DATABASE_URL` | Persist users, favorite teams, games, predictions, rosters, recaps |
+| Anthropic | `ANTHROPIC_API_KEY` | Dynamic chatbot replies, recap generation, fan-perspective writing, agent narration |
+
+Recommended:
+
+| Service | Env var | Why |
+|---------|---------|-----|
+| Redis | `REDIS_URL` | Cache standings, recaps, fan recaps, and repeated agent outputs |
+| YouTube Data API | `YOUTUBE_API_KEY` | Better highlight/video discovery for reels |
+
+Not required:
+
+| Service | Key needed? | Notes |
+|---------|-------------|-------|
+| ESPN public data | No | The NBA/NFL team/player fallbacks use public ESPN endpoints with sport/league slugs. |
+
+If `ANTHROPIC_API_KEY` is not set, `/api/chat` returns a setup message instead of pretending to be intelligent.
+
+---
+
 ## Architecture
 
 ### Multi-Agent Inference Pipeline
