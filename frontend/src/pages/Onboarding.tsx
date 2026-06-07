@@ -39,7 +39,6 @@ export default function Onboarding() {
   const { data: user } = useCurrentUser();
   const addTeam = useAddFavoriteTeam();
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [saving, setSaving] = useState(false);
 
   const { data: nbaTeams = [], isLoading: nbaLoading } = useQuery<Team[]>({
     queryKey: ["teams", "NBA"],
@@ -70,27 +69,21 @@ export default function Onboarding() {
     });
   }
 
-  async function continueToFeed() {
+  function continueToFeed() {
     const ids = Array.from(activeIds);
     if (!ids.length) return;
-    setSaving(true);
     window.localStorage.setItem("replaysai:onboarded", "true");
     window.localStorage.setItem("replaysai:teamIds", JSON.stringify(ids));
-    try {
-      await Promise.all(ids.map((id) => addTeam.mutateAsync(id)));
-    } finally {
-      setSaving(false);
-      navigate("/feed");
-    }
+    ids.forEach((id) => addTeam.mutate(id));
+    navigate("/feed");
   }
 
   function TeamSection({ title, emoji, teams, loading }: { title: string; emoji: string; teams: Team[]; loading: boolean }) {
     return (
       <div className="team-section">
         <h3>{emoji} {title}</h3>
-        {loading ? (
-          <p className="loading-text">Loading teams…</p>
-        ) : teams.length === 0 ? (
+        {loading && <p className="loading-text">Syncing live ESPN teams in the background...</p>}
+        {teams.length === 0 ? (
           <p className="empty-state">No teams found.</p>
         ) : (
           <div className="team-grid">
@@ -126,21 +119,20 @@ export default function Onboarding() {
         </div>
       </div>
 
-      <TeamSection title="NBA Teams" emoji="🏀" teams={visibleNbaTeams} loading={nbaLoading && nbaTeams.length === 0} />
-      <TeamSection title="NFL Teams" emoji="🏈" teams={visibleNflTeams} loading={nflLoading && nflTeams.length === 0} />
+      <TeamSection title="NBA Teams" emoji="🏀" teams={visibleNbaTeams} loading={nbaLoading} />
+      <TeamSection title="NFL Teams" emoji="🏈" teams={visibleNflTeams} loading={nflLoading} />
 
       <div className="onboarding-footer">
         <button
           className="btn-hero-primary"
           onClick={continueToFeed}
-          disabled={activeIds.size === 0 || saving}
+          disabled={activeIds.size === 0}
         >
-          {saving
-            ? "Activating agents..."
-            : activeIds.size === 0
+          {activeIds.size === 0
             ? "Pick at least one team"
             : `Continue with ${activeIds.size} team${activeIds.size > 1 ? "s" : ""} →`}
         </button>
+        <button className="btn-ghost" onClick={() => navigate("/feed")}>Skip for now</button>
       </div>
     </div>
   );

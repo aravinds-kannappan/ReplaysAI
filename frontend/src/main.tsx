@@ -22,7 +22,7 @@ if (!PUBLISHABLE_KEY) {
 } else {
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
-      <ClerkProvider publishableKey={PUBLISHABLE_KEY} afterSignInUrl="/onboarding" afterSignUpUrl="/onboarding">
+      <ClerkProvider publishableKey={PUBLISHABLE_KEY} afterSignInUrl="/feed" afterSignUpUrl="/feed">
         <App />
       </ClerkProvider>
     </StrictMode>

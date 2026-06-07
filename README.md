@@ -125,7 +125,7 @@ Pick up to 8 players per week (NBA or NFL). Players are materialized from box sc
 ### Personalization Data Loading
 `/api/teams` now self-seeds NBA and NFL team rows if the database is empty, returns ESPN/public fallback teams if persistence fails, and the onboarding UI also includes a local fallback list so users never see an empty team picker. `/api/users/me/teams` can create a missing fallback team when it is selected. `/api/rosters/players` repairs older box-score-only ingestions by creating missing `players` records and links them to `player_game_stats`; it also falls back to ESPN public athlete leaderboards when no player rows exist.
 
-After first login, users pick favorite teams once. The feed now treats those teams as the personalization graph: if historical games are not loaded yet, the dashboard shows an agent retrieval state for schedules, players, news rails, reels, and predictions instead of a dead empty feed. Users can edit teams later from the command center or onboarding route.
+Team selection is now optional from the dashboard instead of a forced post-login gate. The onboarding route renders local NBA/NFL fallback teams immediately while ESPN syncs in the background, and it navigates back to the feed instantly while favorite-team writes complete asynchronously. Users can edit teams later from the command center or onboarding route; if no teams are selected, all tabs remain accessible.
 
 ### ESPN Public API Keys
 ESPN's public endpoints do not require API keys. The relevant sport/league slugs are:

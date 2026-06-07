@@ -283,7 +283,7 @@ export default function Feed() {
               </div>
               {isLoading && <p className="loading-text">Loading games...</p>}
               {!isLoading && games.length === 0 && (
-                onboarded ? <PersonalizationLoader teams={favoriteTeams} /> : <p className="empty-state">No games loaded yet. Pick teams to personalize the feed.</p>
+                onboarded ? <PersonalizationLoader teams={favoriteTeams} /> : <p className="empty-state">No games loaded yet. You can still use every tab, then choose teams later from Edit teams.</p>
               )}
               <div className="games-grid compact">
                 {games.slice(0, 6).map((game) => <ScoreCard key={game.id} game={game} />)}
