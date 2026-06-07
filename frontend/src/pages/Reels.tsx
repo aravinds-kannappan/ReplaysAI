@@ -12,6 +12,7 @@ const CV_TAGS = {
 
 export default function Reels() {
   const [league, setLeague] = useState<League>("NBA");
+  const [mode, setMode] = useState<"studio" | "cuts" | "explain">("studio");
   const { data } = useGames({ sport: league, limit: 8 });
   const searchUrl = `https://www.google.com/search?q=${league}+highlights+today`;
 
@@ -30,6 +31,16 @@ export default function Reels() {
         </div>
       </header>
 
+      <div className="inner-tabs">
+        {[
+          ["studio", "Vision Studio"],
+          ["cuts", "2 / 5 / 10 Min Cuts"],
+          ["explain", "Explain The Game"],
+        ].map(([id, label]) => (
+          <button key={id} className={mode === id ? "active" : ""} onClick={() => setMode(id as typeof mode)}>{label}</button>
+        ))}
+      </div>
+
       <section className="reels-stage">
         <div className="reel-screen">
           <div className="scan-line" />
@@ -37,8 +48,14 @@ export default function Reels() {
           <div className="frame-target target-two" />
           <div className="reel-copy">
             <span>Vision queue</span>
-            <strong>{league === "NBA" ? "Late-clock shot, weak-side contest, bench reaction" : "Pocket pressure, release angle, safety rotation"}</strong>
-            <p>CV agent extracts frames, labels play types, and hands the best moments to the recap agent.</p>
+            <strong>
+              {mode === "cuts"
+                ? "Generate a short reel, full story reel, or detailed film-room cut"
+                : mode === "explain"
+                  ? "Slow the game down and explain why each moment mattered"
+                  : league === "NBA" ? "Late-clock shot, weak-side contest, bench reaction" : "Pocket pressure, release angle, safety rotation"}
+            </strong>
+            <p>{mode === "studio" ? "CV agent extracts frames, labels play types, and hands the best moments to the recap agent." : "The fan chooses how detailed the reel should be, and the agent changes clip length plus narration depth."}</p>
           </div>
         </div>
         <aside className="reel-controls">

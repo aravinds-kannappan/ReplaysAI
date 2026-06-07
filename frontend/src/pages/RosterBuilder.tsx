@@ -9,6 +9,7 @@ const MAX_PLAYERS = 8;
 
 export default function RosterBuilder() {
   const [league, setLeague] = useState<League>("NBA");
+  const [tab, setTab] = useState<"draft" | "duel" | "future">("draft");
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const { data: players = [], isLoading } = useRosterPlayers(league) as { data?: RosterPlayer[]; isLoading: boolean };
   const { data: rosters = [] } = useRosters() as { data?: Roster[] };
@@ -42,6 +43,16 @@ export default function RosterBuilder() {
         </div>
       </header>
 
+      <div className="inner-tabs">
+        {[
+          ["draft", "Draft Board"],
+          ["duel", "Player Duels"],
+          ["future", "Future Seasons"],
+        ].map(([id, label]) => (
+          <button key={id} className={tab === id ? "active" : ""} onClick={() => setTab(id as typeof tab)}>{label}</button>
+        ))}
+      </div>
+
       <section className="versus-stage">
         <div className="versus-side">
           <span>Your roster</span>
@@ -63,9 +74,16 @@ export default function RosterBuilder() {
         </div>
       )}
 
+      {tab === "future" && (
+        <section className="dashboard-panel future-panel">
+          <div className="panel-heading"><div><span>Projection lab</span><h2>Future season simulation</h2></div></div>
+          <p className="empty-state">Coming next: age curves, schedule strength, player usage, and injury-risk assumptions for multi-season what-ifs.</p>
+        </section>
+      )}
+
       <section className="fantasy-grid">
         <div className="dashboard-panel">
-          <div className="panel-heading"><div><span>{league} pool</span><h2>Available players</h2></div></div>
+          <div className="panel-heading"><div><span>{league} pool</span><h2>{tab === "duel" ? "Choose duel opponents" : "Available players"}</h2></div></div>
           {isLoading && <p className="loading-text">Loading players...</p>}
           <div className="player-market">
             {players.slice(0, 30).map((player) => (

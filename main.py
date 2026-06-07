@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.auth import router as auth_router
+from api.chat import router as chat_router
 from api.fantasy import router as fantasy_router
 from api.feed import router as feed_router
 from api.games import router as games_router
@@ -25,6 +26,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_router)
+app.include_router(chat_router)
 app.include_router(feed_router)
 app.include_router(games_router)
 app.include_router(recaps_router)

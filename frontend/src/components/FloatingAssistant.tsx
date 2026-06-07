@@ -1,25 +1,39 @@
 import { useState, type FormEvent } from "react";
-import { SignedIn } from "@clerk/clerk-react";
+import { SignedIn, useAuth } from "@clerk/clerk-react";
+import axios from "axios";
+import { apiPath } from "../lib/api";
 
 type Message = { role: "assistant" | "user"; text: string };
 
 export default function FloatingAssistant() {
+  const { getToken } = useAuth();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
+  const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     { role: "assistant", text: "I can help pick teams, compare players, explain reels, or turn a game into a prediction." },
   ]);
 
-  function submit(e: FormEvent) {
+  async function submit(e: FormEvent) {
     e.preventDefault();
     const text = draft.trim();
     if (!text) return;
     setDraft("");
-    setMessages((prev) => [
-      ...prev,
-      { role: "user", text },
-      { role: "assistant", text: "Got it. I would start with your selected league, favorite teams, and the latest games on the current tab, then make the next action obvious." },
-    ]);
+    setMessages((prev) => [...prev, { role: "user", text }]);
+    setLoading(true);
+    try {
+      const token = await getToken();
+      const res = await axios.post(
+        apiPath("/api/chat"),
+        { message: text, context: window.location.pathname },
+        { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+      );
+      setMessages((prev) => [...prev, { role: "assistant", text: res.data.reply }]);
+    } catch {
+      setMessages((prev) => [...prev, { role: "assistant", text: "I could not reach the assistant service yet. Check the backend environment and Anthropic key." }]);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -40,7 +54,7 @@ export default function FloatingAssistant() {
             </div>
             <form className="floating-form" onSubmit={submit}>
               <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Ask for help..." />
-              <button type="submit">Send</button>
+              <button type="submit" disabled={loading}>{loading ? "..." : "Send"}</button>
             </form>
           </div>
         )}

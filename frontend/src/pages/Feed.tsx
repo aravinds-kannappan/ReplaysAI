@@ -78,6 +78,32 @@ function AgentPanel() {
   );
 }
 
+function PersonalizationLoader({ teams }: { teams: { abbreviation: string; sport: string; name: string }[] }) {
+  return (
+    <div className="personalization-loader">
+      <div>
+        <span>Agents retrieving context</span>
+        <h2>Your teams are activated</h2>
+        <p>ReplaysAI is ready to pull schedules, players, reels, news, predictions, and matchup context for your selected teams.</p>
+      </div>
+      <div className="team-activation-list">
+        {teams.map((team) => (
+          <div key={`${team.sport}-${team.abbreviation}`}>
+            <strong>{team.abbreviation}</strong>
+            <span>{team.name}</span>
+          </div>
+        ))}
+      </div>
+      <div className="agent-panel">
+        {["Schedule scan", "Player graph", "News rails", "Reel queue"].map((job) => (
+          <div key={job} className="agent-status-card"><span className="agent-light" /><div><strong>{job}</strong><p>Queued for this team graph.</p></div></div>
+        ))}
+      </div>
+      <Link to="/onboarding" className="btn-ghost">Edit teams</Link>
+    </div>
+  );
+}
+
 function AssistantChat({ games, league }: { games: Game[]; league: League }) {
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -167,6 +193,7 @@ export default function Feed() {
   const games: Game[] = (feed?.games ?? []).filter((game: Game) => game.sport === league);
   const onboarded = feed?.onboarded ?? false;
   const favoriteCount = user?.favorite_teams?.length ?? 0;
+  const favoriteTeams = (user?.favorite_teams ?? []) as { abbreviation: string; sport: string; name: string }[];
   const topRosterPlayers = rosterPlayers.slice(0, 5) as {
     id: number;
     name: string;
@@ -201,7 +228,7 @@ export default function Feed() {
         <div className="sidebar-card">
           <span>Personalization</span>
           <strong>{onboarded ? `${favoriteCount} teams active` : "Needs setup"}</strong>
-          <Link to="/onboarding">Edit teams</Link>
+            <Link to="/onboarding">Edit teams</Link>
         </div>
       </aside>
 
@@ -234,6 +261,15 @@ export default function Feed() {
             <Link to="/onboarding" className="btn-primary">Choose teams</Link>
           </div>
         )}
+        {onboarded && (
+          <div className="setup-banner">
+            <div>
+              <strong>{favoriteCount} teams active.</strong>
+              <p>Agents will use these teams to rank games, reels, predictions, and roster recommendations.</p>
+            </div>
+            <Link to="/onboarding" className="btn-primary">Edit teams</Link>
+          </div>
+        )}
 
         {activeTab === "feed" && (
           <section className="dashboard-grid">
@@ -247,7 +283,7 @@ export default function Feed() {
               </div>
               {isLoading && <p className="loading-text">Loading games...</p>}
               {!isLoading && games.length === 0 && (
-                <p className="empty-state">No games loaded yet. Run ingestion or pick teams to personalize the feed.</p>
+                onboarded ? <PersonalizationLoader teams={favoriteTeams} /> : <p className="empty-state">No games loaded yet. Pick teams to personalize the feed.</p>
               )}
               <div className="games-grid compact">
                 {games.slice(0, 6).map((game) => <ScoreCard key={game.id} game={game} />)}

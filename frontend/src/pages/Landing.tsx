@@ -1,169 +1,66 @@
 import { Link } from "react-router-dom";
 import { SignedIn, SignedOut } from "@clerk/clerk-react";
-import heroImage from "../assets/hero.png";
 import "./Landing.css";
 
-const METRICS = [
-  { value: "NBA + NFL", label: "sports graph" },
-  { value: "10 seasons", label: "backfill target" },
-  { value: "60 sec", label: "live refresh" },
-  { value: "4 agents", label: "recap pipeline" },
-];
-
-const WORKFLOWS = [
-  "Personal feed from favorite teams and players",
-  "Live game stream that turns into post-game summaries",
-  "Conversational assistant for what happened and what might happen next",
-  "Roster simulator for future-season and what-if analysis",
-];
-
-const AGENTS = [
-  { name: "Ingest", detail: "ESPN schedules, scores, plays, and box scores" },
-  { name: "Detect", detail: "Momentum swings, key moments, player impact" },
-  { name: "Explain", detail: "Recaps, fan angle, and post-game takeaways" },
-  { name: "Predict", detail: "Picks, roster outlook, and future scenarios" },
-];
-
-const TICKER = ["BOS 112", "MIA 98", "KC 27", "BUF 24", "LAL 104", "DAL 99", "SF 31", "PHI 28"];
-
-function ProductPreview() {
-  return (
-    <div className="product-preview" aria-label="Replays AI product preview">
-      <div className="preview-topbar">
-        <span className="preview-brand">ReplaysAI</span>
-        <span className="preview-live">Live</span>
-      </div>
-      <div className="preview-ticker">
-        {TICKER.map((item) => <span key={item}>{item}</span>)}
-      </div>
-      <div className="preview-body">
-        <aside className="preview-rail">
-          {["Feed", "Games", "Roster", "Picks"].map((item, index) => (
-            <span key={item} className={index === 0 ? "active" : ""}>{item}</span>
-          ))}
-        </aside>
-        <main className="preview-main">
-          <div className="preview-game">
-            <div>
-              <span className="preview-label">Tonight</span>
-              <strong>LAL vs BOS</strong>
-            </div>
-            <span className="preview-score">104-101</span>
-          </div>
-          <div className="preview-feed-item">
-            <span className="preview-dot" />
-            <p>ReplaysAI flags a 14-2 run and drafts a Celtics-focused recap.</p>
-          </div>
-          <div className="preview-grid">
-            <div>
-              <span>Win model</span>
-              <strong>68%</strong>
-            </div>
-            <div>
-              <span>Roster outlook</span>
-              <strong>+11.4</strong>
-            </div>
-          </div>
-        </main>
-      </div>
-    </div>
-  );
-}
+const AGENTS = ["Ingest", "Vision", "Narrate", "Forecast", "Personalize"];
+const PLAYS = ["Tatum pull-up three", "Mahomes deep shot", "SGA isolation", "McCaffrey red-zone cut"];
 
 export default function Landing() {
   return (
-    <div className="landing">
-      <section className="landing-hero">
-        <div className="landing-copy">
-          <p className="landing-kicker">Sports intelligence for the personalized fan era</p>
-          <h1>ReplaysAI</h1>
-          <p className="landing-subtitle">
-            A sharper home for NBA and NFL fans where every live game becomes a personalized feed,
-            a clear recap, a prediction surface, and a roster simulation.
+    <main className="landing-v2">
+      <section className="arena-hero">
+        <div className="arena-copy">
+          <p className="arena-kicker">Live sports, rebuilt around your teams</p>
+          <h1>Every game becomes your own broadcast.</h1>
+          <p>
+            ReplaysAI watches NBA and NFL games, finds the moments that matter, cuts reels at the
+            depth you choose, explains the game in plain English, and turns it into picks,
+            fantasy matchups, and post-game memory.
           </p>
-          <div className="landing-actions">
+          <div className="arena-actions">
             <SignedOut>
-              <Link to="/sign-up" className="landing-primary">Start tracking your teams</Link>
-              <Link to="/sign-in" className="landing-secondary">Sign in</Link>
+              <Link to="/sign-up">Start with your teams</Link>
+              <Link to="/sign-in">Sign in</Link>
             </SignedOut>
             <SignedIn>
-              <Link to="/feed" className="landing-primary">Open dashboard</Link>
+              <Link to="/feed">Open command center</Link>
             </SignedIn>
           </div>
-          <div className="landing-proof">
-            {METRICS.map((metric) => (
-              <div key={metric.label}>
-                <strong>{metric.value}</strong>
-                <span>{metric.label}</span>
-              </div>
-            ))}
-          </div>
         </div>
 
-        <div className="landing-visual">
-          <img src={heroImage} alt="" className="hero-mark" />
-          <div className="agent-orbit" aria-hidden="true">
-            {["Ingest", "Vision", "Recap", "Predict"].map((agent) => <span key={agent}>{agent}</span>)}
-          </div>
-          <ProductPreview />
-        </div>
-      </section>
-
-      <section className="landing-section problem-section">
-        <div>
-          <p className="section-eyebrow">Why now</p>
-          <h2>Sports content is everywhere. Personalized context is still missing.</h2>
-        </div>
-        <p>
-          Fans do not just want scores. They want to know why the game moved, how it affects their
-          teams, which players matter next, and what to do before the next matchup. ReplaysAI
-          turns structured sports data into a daily command center for that loop.
-        </p>
-      </section>
-
-      <section className="landing-section workflow-section">
-        <div>
-          <p className="section-eyebrow">Product</p>
-          <h2>One dashboard after login. Four daily jobs.</h2>
-        </div>
-        <div className="workflow-list">
-          {WORKFLOWS.map((workflow) => (
-            <div key={workflow} className="workflow-row">
-              <span />
-              <p>{workflow}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="landing-section agent-section">
-        <div>
-          <p className="section-eyebrow">System</p>
-          <h2>Agents handle the dashboard, not just the recap.</h2>
-        </div>
-        <div className="agent-grid">
+        <div className="arena-system" aria-label="Agent system in motion">
+          <div className="court-lines" />
           {AGENTS.map((agent, index) => (
-            <div key={agent.name} className="agent-card">
-              <span>{String(index + 1).padStart(2, "0")}</span>
-              <strong>{agent.name}</strong>
-              <p>{agent.detail}</p>
-            </div>
+            <span key={agent} className={`agent-token token-${index + 1}`}>{agent}</span>
           ))}
+          <div className="reel-stack">
+            <b>2 min</b>
+            <b>5 min</b>
+            <b>10 min</b>
+          </div>
+          <div className="play-stream">
+            {PLAYS.map((play) => <i key={play}>{play}</i>)}
+          </div>
         </div>
       </section>
 
-      <section className="landing-section cta-band">
+      <section className="landing-flow">
         <div>
-          <p className="section-eyebrow">Next game</p>
-          <h2>Follow teams, build a roster, and let the app explain the season as it unfolds.</h2>
+          <span>01</span>
+          <strong>Pick teams once</strong>
+          <p>The dashboard becomes editable, but your first login starts by activating your NBA/NFL graph.</p>
         </div>
-        <SignedOut>
-          <Link to="/sign-up" className="landing-primary">Create account</Link>
-        </SignedOut>
-        <SignedIn>
-          <Link to="/feed" className="landing-primary">Go to dashboard</Link>
-        </SignedIn>
+        <div>
+          <span>02</span>
+          <strong>Agents retrieve context</strong>
+          <p>Scores, players, schedules, reels, and news rails spin up around those teams.</p>
+        </div>
+        <div>
+          <span>03</span>
+          <strong>Watch smarter</strong>
+          <p>Choose short, medium, or explained reels and carry the insight into picks and fantasy.</p>
+        </div>
       </section>
-    </div>
+    </main>
   );
 }

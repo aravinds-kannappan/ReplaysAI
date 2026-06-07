@@ -1,5 +1,6 @@
 import { useLeaderboard, useMyRank } from "../hooks/usePredictions";
 import { useCurrentUser } from "../hooks/useUser";
+import { useState } from "react";
 
 type LeaderboardEntry = {
   rank: number;
@@ -13,6 +14,7 @@ type LeaderboardEntry = {
 };
 
 export default function Leaderboard() {
+  const [tab, setTab] = useState<"global" | "rivals" | "badges">("global");
   const { data: board = [] } = useLeaderboard() as { data?: LeaderboardEntry[] };
   const { data: myRank } = useMyRank();
   const { data: user } = useCurrentUser();
@@ -30,7 +32,17 @@ export default function Leaderboard() {
         {myRank && <div className="my-rank-chip">Your rank <strong>#{myRank.my_rank}</strong> / {myRank.total_users}</div>}
       </header>
 
-      <section className="podium-grid">
+      <div className="inner-tabs">
+        {[
+          ["global", "Global"],
+          ["rivals", "Rivals"],
+          ["badges", "Badges"],
+        ].map(([id, label]) => (
+          <button key={id} className={tab === id ? "active" : ""} onClick={() => setTab(id as typeof tab)}>{label}</button>
+        ))}
+      </div>
+
+      {tab === "global" && <section className="podium-grid">
         {podium.map((entry) => (
           <div key={entry.user_id} className={`podium-card rank-${entry.rank}`}>
             <span>#{entry.rank}</span>
@@ -40,10 +52,10 @@ export default function Leaderboard() {
             <small>{entry.accuracy}% accuracy · {entry.login_streak} streak</small>
           </div>
         ))}
-      </section>
+      </section>}
 
       <section className="leaderboard-layout">
-        <div className="dashboard-panel">
+        {(tab === "global" || tab === "rivals") && <div className="dashboard-panel">
           <div className="panel-heading"><div><span>Rivals</span><h2>Near your rank</h2></div></div>
           <div className="rival-list">
             {rivals.map((entry: LeaderboardEntry) => (
@@ -54,15 +66,15 @@ export default function Leaderboard() {
               </div>
             ))}
           </div>
-        </div>
-        <div className="dashboard-panel">
+        </div>}
+        {(tab === "global" || tab === "badges") && <div className="dashboard-panel">
           <div className="panel-heading"><div><span>Badges</span><h2>Signals that matter</h2></div></div>
           <div className="badge-radar">
             {["First Pick", "Oracle", "Loyal Fan", "Analyst", "Clutch"].map((badge, index) => (
               <div key={badge}><span>{index + 1}</span><strong>{badge}</strong></div>
             ))}
           </div>
-        </div>
+        </div>}
       </section>
     </div>
   );

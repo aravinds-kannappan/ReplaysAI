@@ -693,6 +693,56 @@ a { color: inherit; text-decoration: none; }
   font-size: 0.9rem;
 }
 
+.personalization-loader {
+  display: grid;
+  gap: 14px;
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, var(--league-soft), transparent),
+    #101517;
+  padding: 18px;
+}
+
+.personalization-loader > div:first-child span {
+  color: var(--league-accent);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.personalization-loader h2 {
+  margin: 6px 0;
+  color: #fff;
+}
+
+.personalization-loader p {
+  color: #98a7ae;
+}
+
+.team-activation-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.team-activation-list div {
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  padding: 12px;
+  background: #0b1012;
+}
+
+.team-activation-list strong {
+  display: block;
+  color: var(--league-accent);
+}
+
+.team-activation-list span {
+  color: #94a4ab;
+  font-size: 0.8rem;
+}
+
 .dashboard-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 340px;
@@ -950,6 +1000,37 @@ a { color: inherit; text-decoration: none; }
   align-items: end;
   margin: 0 auto 20px;
   max-width: 1180px;
+}
+
+.inner-tabs {
+  max-width: 1180px;
+  margin: 0 auto 16px;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+}
+
+.inner-tabs button {
+  min-height: 40px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 999px;
+  background: rgba(255,255,255,0.05);
+  color: #9caaa2;
+  cursor: pointer;
+  padding: 0 14px;
+  font-weight: 900;
+}
+
+.inner-tabs button.active {
+  background: var(--league-accent);
+  border-color: var(--league-accent);
+  color: #03100b;
+}
+
+.future-panel {
+  max-width: 1180px;
+  margin: 0 auto 14px;
 }
 
 .experience-hero h1 {
