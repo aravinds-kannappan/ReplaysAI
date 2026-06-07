@@ -80,6 +80,7 @@ def get_teams(sport: Optional[str] = Query(None), db: Session = Depends(get_db))
             for team_data in fetch_espn_teams(sport_key):
                 if not db.query(Team).filter_by(abbreviation=team_data["abbreviation"], sport=sport_key).first():
                     db.add(Team(
+                        id=team_data["id"],
                         name=team_data["name"],
                         abbreviation=team_data["abbreviation"],
                         sport=sport_key,
@@ -100,6 +101,18 @@ def get_teams(sport: Optional[str] = Query(None), db: Session = Depends(get_db))
     if sport:
         q = q.filter(Team.sport == sport.upper())
     teams = q.order_by(Team.sport, Team.name).all()
+    if not teams and sport:
+        return [
+            {
+                "id": team["id"],
+                "name": team["name"],
+                "abbreviation": team["abbreviation"],
+                "sport": team["sport"],
+                "conference": team["conference"],
+                "division": team["division"],
+            }
+            for team in fetch_espn_teams(sport.upper())
+        ]
     return [
         {
             "id": team.id,

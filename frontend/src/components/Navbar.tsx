@@ -17,6 +17,7 @@ export default function Navbar() {
       <SignedIn>
         <div className="navbar-links">
           <Link to="/feed" className={pathname === "/feed" ? "active" : ""}>Feed</Link>
+          <Link to="/reels" className={pathname === "/reels" ? "active" : ""}>Reels</Link>
           <Link to="/predictions" className={pathname === "/predictions" ? "active" : ""}>Picks</Link>
           <Link to="/roster" className={pathname === "/roster" ? "active" : ""}>Roster</Link>
           <Link to="/leaderboard" className={pathname === "/leaderboard" ? "active" : ""}>Leaders</Link>

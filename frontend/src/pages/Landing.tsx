@@ -102,6 +102,9 @@ export default function Landing() {
 
         <div className="landing-visual">
           <img src={heroImage} alt="" className="hero-mark" />
+          <div className="agent-orbit" aria-hidden="true">
+            {["Ingest", "Vision", "Recap", "Predict"].map((agent) => <span key={agent}>{agent}</span>)}
+          </div>
           <ProductPreview />
         </div>
       </section>

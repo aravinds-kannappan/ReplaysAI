@@ -1,115 +1,94 @@
-import { useState } from "react";
-import { useRosters, useRosterPlayers, useSaveRoster } from "../hooks/usePredictions";
+import { useMemo, useState } from "react";
+import { useRosterPlayers, useRosters, useSaveRoster } from "../hooks/usePredictions";
+
+type League = "NBA" | "NFL";
+type RosterPlayer = { id: number; name: string; position: string | null; team: string | null; impact_score: number; headshot?: string | null };
+type Roster = { sport: string; player_ids?: number[]; total_points: number; locked: boolean };
 
 const MAX_PLAYERS = 8;
 
-type RosterPlayer = {
-  id: number;
-  name: string;
-  position: string | null;
-  team: string | null;
-  impact_score: number;
-};
-
-type Roster = {
-  sport: string;
-  player_ids?: number[];
-  total_points: number;
-  locked: boolean;
-};
-
 export default function RosterBuilder() {
-  const [sport, setSport] = useState("NBA");
+  const [league, setLeague] = useState<League>("NBA");
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
-  const [saved, setSaved] = useState(false);
-  const { data: players = [], isLoading } = useRosterPlayers(sport) as { data?: RosterPlayer[]; isLoading: boolean };
+  const { data: players = [], isLoading } = useRosterPlayers(league) as { data?: RosterPlayer[]; isLoading: boolean };
   const { data: rosters = [] } = useRosters() as { data?: Roster[] };
   const saveRoster = useSaveRoster();
+  const selectedPlayers = selectedIds.map((id) => players.find((player) => player.id === id)).filter(Boolean) as RosterPlayer[];
+  const opponent = players.filter((player) => !selectedIds.includes(player.id)).slice(0, selectedPlayers.length || 4);
+  const myScore = useMemo(() => selectedPlayers.reduce((sum, player) => sum + player.impact_score, 0), [selectedPlayers]);
+  const oppScore = opponent.reduce((sum, player) => sum + player.impact_score, 0);
+  const currentWeekRoster = rosters.find((roster) => roster.sport === league);
 
   function toggle(id: number) {
-    setSaved(false);
-    setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : prev.length < MAX_PLAYERS ? [...prev, id] : prev
-    );
+    setSelectedIds((prev) => prev.includes(id) ? prev.filter((item) => item !== id) : prev.length < MAX_PLAYERS ? [...prev, id] : prev);
   }
 
-  async function handleSave() {
-    await saveRoster.mutateAsync({ sport, player_ids: selectedIds });
-    setSaved(true);
+  async function save() {
+    await saveRoster.mutateAsync({ sport: league, player_ids: selectedIds });
   }
-
-  const currentWeekRoster = rosters.find((r) => r.sport === sport);
 
   return (
-    <div className="page-roster">
-      <div className="roster-header">
-        <h2>📋 Weekly Roster</h2>
-        <p>Pick up to {MAX_PLAYERS} players. Points scored based on real play-by-play performance.</p>
-        <div className="sport-tabs">
-          {["NBA", "NFL"].map((s) => (
-            <button key={s} className={`sport-tab ${sport === s ? "active" : ""}`} onClick={() => { setSport(s); setSelectedIds([]); }}>
-              {s}
-            </button>
+    <div className={`experience-page league-${league.toLowerCase()}`}>
+      <header className="experience-hero">
+        <div>
+          <p className="dashboard-kicker">Fantasy arena</p>
+          <h1>Build a roster, then run the matchup</h1>
+          <p>Draft players from live ESPN stat fallbacks, compare impact, and save the lineup for this week.</p>
+        </div>
+        <div className="league-switch">
+          {(["NBA", "NFL"] as League[]).map((item) => (
+            <button key={item} className={league === item ? "active" : ""} onClick={() => { setLeague(item); setSelectedIds([]); }}>{item}</button>
           ))}
         </div>
-      </div>
+      </header>
+
+      <section className="versus-stage">
+        <div className="versus-side">
+          <span>Your roster</span>
+          <strong>{Math.round(myScore)}</strong>
+          <p>{selectedPlayers.length}/{MAX_PLAYERS} players selected</p>
+        </div>
+        <div className="versus-core">VS</div>
+        <div className="versus-side">
+          <span>Projected opponent</span>
+          <strong>{Math.round(oppScore)}</strong>
+          <p>{opponent.length} comparable players</p>
+        </div>
+      </section>
 
       {currentWeekRoster && (
         <div className="current-roster">
-          <strong>This week's roster:</strong> {currentWeekRoster.player_ids?.length ?? 0} players · {currentWeekRoster.total_points} pts
-          {currentWeekRoster.locked && <span className="locked-badge">🔒 Locked</span>}
+          <strong>This week:</strong> {currentWeekRoster.player_ids?.length ?? 0} players · {currentWeekRoster.total_points} pts
+          {currentWeekRoster.locked && <span className="locked-badge">Locked</span>}
         </div>
       )}
 
-      <div className="roster-layout">
-        <div className="players-list">
-          <h3>Available Players</h3>
-          {isLoading && <p className="loading-text">Loading players…</p>}
-          {players.map((p) => {
-            const isSelected = selectedIds.includes(p.id);
-            const canSelect = isSelected || selectedIds.length < MAX_PLAYERS;
-            return (
-              <div key={p.id} className={`player-row ${isSelected ? "selected" : ""} ${!canSelect ? "disabled" : ""}`} onClick={() => canSelect && toggle(p.id)}>
-                <div className="player-info">
-                  <span className="player-name">{p.name}</span>
-                  <span className="player-meta">{p.team} · {p.position || "?"}</span>
-                </div>
-                <div className="player-score">
-                  <span className="impact">{p.impact_score}</span>
-                  <span className="impact-label">impact/game</span>
-                </div>
-                {isSelected && <span className="selected-check">✓</span>}
-              </div>
-            );
-          })}
+      <section className="fantasy-grid">
+        <div className="dashboard-panel">
+          <div className="panel-heading"><div><span>{league} pool</span><h2>Available players</h2></div></div>
+          {isLoading && <p className="loading-text">Loading players...</p>}
+          <div className="player-market">
+            {players.slice(0, 30).map((player) => (
+              <button key={player.id} className={selectedIds.includes(player.id) ? "selected" : ""} onClick={() => toggle(player.id)}>
+                {player.headshot && <img src={player.headshot} alt="" />}
+                <span><strong>{player.name}</strong><small>{player.team || "FA"} · {player.position || "UTIL"}</small></span>
+                <b>{player.impact_score}</b>
+              </button>
+            ))}
+          </div>
         </div>
 
-        <div className="roster-sidebar">
-          <h3>My Picks ({selectedIds.length}/{MAX_PLAYERS})</h3>
-          {selectedIds.length === 0 ? (
-            <p className="empty-state">Click players to add them</p>
-          ) : (
-            <div className="my-picks">
-              {selectedIds.map((id) => {
-                const p = players.find((pl) => pl.id === id);
-                return p ? (
-                  <div key={id} className="pick-item">
-                    <span>{p.name}</span>
-                    <button className="remove-pick" onClick={() => toggle(id)}>×</button>
-                  </div>
-                ) : null;
-              })}
-            </div>
-          )}
-          <button
-            className="btn-hero-primary"
-            onClick={handleSave}
-            disabled={selectedIds.length === 0 || saveRoster.isPending || saved}
-          >
-            {saved ? "✓ Saved!" : saveRoster.isPending ? "Saving…" : "Save Roster"}
+        <aside className="dashboard-panel">
+          <div className="panel-heading"><div><span>Lineup</span><h2>My squad</h2></div></div>
+          <div className="my-picks">
+            {selectedPlayers.map((player) => <div key={player.id} className="pick-item"><span>{player.name}</span><button onClick={() => toggle(player.id)}>x</button></div>)}
+            {selectedPlayers.length === 0 && <p className="empty-state">Tap players to draft them.</p>}
+          </div>
+          <button className="btn-primary" disabled={selectedIds.length === 0 || saveRoster.isPending} onClick={save}>
+            {saveRoster.isPending ? "Saving..." : "Save lineup"}
           </button>
-        </div>
-      </div>
+        </aside>
+      </section>
     </div>
   );
 }

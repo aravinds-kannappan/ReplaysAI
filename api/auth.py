@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from api.espn_public import fetch_espn_teams
 from db.models import (
     Badge, Notification, Team, Player, User,
     UserBadge, UserFavoriteTeam, UserFollowedPlayer, UserPoints, UserStreak,
@@ -127,7 +128,22 @@ class TeamBody(BaseModel):
 def add_favorite_team(body: TeamBody, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     team = db.query(Team).get(body.team_id)
     if not team:
-        raise HTTPException(status_code=404, detail="Team not found")
+        sport = "NBA" if 1000 < body.team_id < 2000 else "NFL" if 2000 < body.team_id < 3000 else None
+        if sport:
+            team_data = next((t for t in fetch_espn_teams(sport) if t["id"] == body.team_id), None)
+            if team_data:
+                team = Team(
+                    id=team_data["id"],
+                    name=team_data["name"],
+                    abbreviation=team_data["abbreviation"],
+                    sport=team_data["sport"],
+                    conference=team_data["conference"],
+                    division=team_data["division"],
+                )
+                db.add(team)
+                db.commit()
+        if not team:
+            raise HTTPException(status_code=404, detail="Team not found")
     existing = db.query(UserFavoriteTeam).filter_by(user_id=user.id, team_id=body.team_id).first()
     if not existing:
         db.add(UserFavoriteTeam(user_id=user.id, team_id=body.team_id))

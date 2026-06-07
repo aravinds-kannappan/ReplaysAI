@@ -123,6 +123,51 @@
   position: relative;
 }
 
+.agent-orbit {
+  position: absolute;
+  width: min(76%, 520px);
+  aspect-ratio: 1;
+  border: 1px solid rgba(32, 211, 139, 0.2);
+  border-radius: 50%;
+  animation: orbit-spin 22s linear infinite;
+}
+
+.agent-orbit::before,
+.agent-orbit::after {
+  content: "";
+  position: absolute;
+  inset: 13%;
+  border: 1px dashed rgba(47, 210, 255, 0.2);
+  border-radius: 50%;
+}
+
+.agent-orbit::after {
+  inset: 31%;
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.agent-orbit span {
+  position: absolute;
+  min-width: 74px;
+  text-align: center;
+  border-radius: 999px;
+  padding: 7px 10px;
+  background: #0f1517;
+  border: 1px solid rgba(32, 211, 139, 0.35);
+  color: #dffff2;
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.agent-orbit span:nth-child(1) { left: 50%; top: -14px; transform: translateX(-50%); }
+.agent-orbit span:nth-child(2) { right: -28px; top: 48%; }
+.agent-orbit span:nth-child(3) { left: 50%; bottom: -14px; transform: translateX(-50%); }
+.agent-orbit span:nth-child(4) { left: -30px; top: 48%; }
+
+@keyframes orbit-spin {
+  to { transform: rotate(360deg); }
+}
+
 .hero-mark {
   position: absolute;
   width: min(42%, 260px);
@@ -139,6 +184,7 @@
   position: relative;
   box-shadow: 0 30px 100px rgba(0, 0, 0, 0.48);
   backdrop-filter: blur(16px);
+  z-index: 2;
 }
 
 .preview-topbar {

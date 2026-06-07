@@ -2,10 +2,12 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { SignIn, SignUp } from "@clerk/clerk-react";
 import Navbar from "./components/Navbar";
+import FloatingAssistant from "./components/FloatingAssistant";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Landing from "./pages/Landing";
 import Onboarding from "./pages/Onboarding";
 import Feed from "./pages/Feed";
+import Reels from "./pages/Reels";
 import GameDetail from "./pages/GameDetail";
 import PlayerProfile from "./pages/PlayerProfile";
 import Predictions from "./pages/Predictions";
@@ -32,6 +34,7 @@ export default function App() {
           {/* Auth-gated */}
           <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
           <Route path="/feed" element={<ProtectedRoute><Feed /></ProtectedRoute>} />
+          <Route path="/reels" element={<ProtectedRoute><Reels /></ProtectedRoute>} />
           <Route path="/game/:id" element={<ProtectedRoute><GameDetail /></ProtectedRoute>} />
           <Route path="/player/:id" element={<ProtectedRoute><PlayerProfile /></ProtectedRoute>} />
           <Route path="/predictions" element={<ProtectedRoute><Predictions /></ProtectedRoute>} />
@@ -39,6 +42,7 @@ export default function App() {
           <Route path="/roster" element={<ProtectedRoute><RosterBuilder /></ProtectedRoute>} />
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         </Routes>
+        <FloatingAssistant />
       </BrowserRouter>
     </QueryClientProvider>
   );
