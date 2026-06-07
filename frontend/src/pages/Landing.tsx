@@ -24,12 +24,17 @@ const AGENTS = [
   { name: "Predict", detail: "Picks, roster outlook, and future scenarios" },
 ];
 
+const TICKER = ["BOS 112", "MIA 98", "KC 27", "BUF 24", "LAL 104", "DAL 99", "SF 31", "PHI 28"];
+
 function ProductPreview() {
   return (
     <div className="product-preview" aria-label="Replays AI product preview">
       <div className="preview-topbar">
         <span className="preview-brand">ReplaysAI</span>
         <span className="preview-live">Live</span>
+      </div>
+      <div className="preview-ticker">
+        {TICKER.map((item) => <span key={item}>{item}</span>)}
       </div>
       <div className="preview-body">
         <aside className="preview-rail">
@@ -73,8 +78,8 @@ export default function Landing() {
           <p className="landing-kicker">Sports intelligence for the personalized fan era</p>
           <h1>ReplaysAI</h1>
           <p className="landing-subtitle">
-            A Sleeper-style home for NBA and NFL fans where every live game becomes a personalized
-            feed, a clear recap, a prediction surface, and a roster simulation.
+            A sharper home for NBA and NFL fans where every live game becomes a personalized feed,
+            a clear recap, a prediction surface, and a roster simulation.
           </p>
           <div className="landing-actions">
             <SignedOut>
@@ -134,8 +139,9 @@ export default function Landing() {
           <h2>Agents handle the dashboard, not just the recap.</h2>
         </div>
         <div className="agent-grid">
-          {AGENTS.map((agent) => (
+          {AGENTS.map((agent, index) => (
             <div key={agent.name} className="agent-card">
+              <span>{String(index + 1).padStart(2, "0")}</span>
               <strong>{agent.name}</strong>
               <p>{agent.detail}</p>
             </div>

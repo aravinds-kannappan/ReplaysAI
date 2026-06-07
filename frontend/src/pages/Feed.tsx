@@ -13,6 +13,8 @@ type ChatMessage = {
   text: string;
 };
 
+type League = "NBA" | "NFL";
+
 const TABS: { id: DashboardTab; label: string }[] = [
   { id: "feed", label: "Feed" },
   { id: "live", label: "Live" },
@@ -28,6 +30,21 @@ const AGENTS = [
   { name: "Personalizer", status: "Ranks games from your favorite teams and followed players." },
   { name: "Forecast", status: "Prepares picks, roster outlooks, and what-if simulations." },
 ];
+
+const LEAGUE_META: Record<League, { name: string; search: string; stream: string; cues: string[] }> = {
+  NBA: {
+    name: "NBA",
+    search: "https://www.google.com/search?q=NBA+highlights+today",
+    stream: "https://www.espn.com/nba/",
+    cues: ["Shot quality", "Run detector", "Star usage", "Clutch swings"],
+  },
+  NFL: {
+    name: "NFL",
+    search: "https://www.google.com/search?q=NFL+highlights+today",
+    stream: "https://www.espn.com/nfl/",
+    cues: ["Drive success", "Explosive plays", "QB pressure", "Red-zone swings"],
+  },
+};
 
 function formatGameTitle(game?: Game) {
   if (!game) return "No game selected";
@@ -61,20 +78,20 @@ function AgentPanel() {
   );
 }
 
-function AssistantChat({ games }: { games: Game[] }) {
+function AssistantChat({ games, league }: { games: Game[]; league: League }) {
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: "assistant",
-      text: "Ask about your teams, a live game, a player trend, or a roster what-if. I will use the games loaded in your dashboard first.",
+      text: "Ask about your teams, a live game, a player trend, or a roster what-if. I will use the selected league and loaded dashboard games first.",
     },
   ]);
 
   function respond(question: string) {
     const featured = games[0];
     const answer = featured
-      ? `${formatGameTitle(featured)} is the best starting point. The dashboard has it marked ${featured.status}, with ${featured.away_score ?? 0}-${featured.home_score ?? 0} on the board. Next step: open the game card for the play timeline, recap, and fan-mode summary.`
-      : "I do not see personalized games yet. Pick favorite teams in onboarding or run the historical backfill so I can ground answers in real game data.";
+      ? `${formatGameTitle(featured)} is the best ${league} starting point. It is marked ${featured.status}, with ${featured.away_score ?? 0}-${featured.home_score ?? 0} on the board. Next step: open the game card for the play timeline, recap, and fan-mode summary.`
+      : `I do not see ${league} games yet. Pick favorite teams in onboarding or run the historical backfill so I can ground answers in real game data.`;
 
     setMessages((prev) => [
       ...prev,
@@ -112,15 +129,42 @@ function AssistantChat({ games }: { games: Game[] }) {
   );
 }
 
+function LeagueSwitch({ league, onChange }: { league: League; onChange: (league: League) => void }) {
+  return (
+    <div className="league-switch" aria-label="League switch">
+      {(["NBA", "NFL"] as League[]).map((item) => (
+        <button key={item} className={league === item ? "active" : ""} onClick={() => onChange(item)}>
+          {item}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function SignalBoard({ league }: { league: League }) {
+  return (
+    <div className="signal-board">
+      {LEAGUE_META[league].cues.map((cue, index) => (
+        <div key={cue} className="signal-row">
+          <span>{String(index + 1).padStart(2, "0")}</span>
+          <strong>{cue}</strong>
+          <i style={{ width: `${68 + index * 7}%` }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function Feed() {
   const [activeTab, setActiveTab] = useState<DashboardTab>("feed");
+  const [league, setLeague] = useState<League>("NBA");
   const { data: user } = useCurrentUser();
   const { data: feed, isLoading } = useFeed();
-  const { data: liveGames } = useGames({ status: "live", limit: 12 });
+  const { data: liveGames } = useGames({ sport: league, status: "live", limit: 12 });
   const { data: upcomingGames = [] } = useUpcomingGames();
-  const { data: rosterPlayers = [] } = useRosterPlayers();
+  const { data: rosterPlayers = [] } = useRosterPlayers(league);
 
-  const games: Game[] = feed?.games ?? [];
+  const games: Game[] = (feed?.games ?? []).filter((game: Game) => game.sport === league);
   const onboarded = feed?.onboarded ?? false;
   const favoriteCount = user?.favorite_teams?.length ?? 0;
   const topRosterPlayers = rosterPlayers.slice(0, 5) as {
@@ -137,9 +181,10 @@ export default function Feed() {
   );
 
   const live = liveGames?.games ?? [];
+  const leagueUpcoming = upcomingGames.filter((game: { sport: string }) => game.sport === league);
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell league-${league.toLowerCase()}`}>
       <aside className="app-sidebar">
         <Link to="/" className="sidebar-brand">ReplaysAI</Link>
         <nav className="sidebar-nav">
@@ -164,16 +209,19 @@ export default function Feed() {
         <header className="dashboard-header">
           <div>
             <p className="dashboard-kicker">Command center</p>
-            <h1>{user?.display_name || user?.username || "Your sports dashboard"}</h1>
+            <h1>{user?.display_name || user?.username || `${league} dashboard`}</h1>
             <p>
-              Personalized feed, live games, post-game summaries, picks, chat, and roster forecasts
+              Personalized {league} feed, live games, post-game summaries, picks, chat, and roster forecasts
               in one place.
             </p>
           </div>
-          <div className="dashboard-stats">
-            <DashboardStat label="Points" value={user?.total_points ?? 0} />
-            <DashboardStat label="Streak" value={user?.login_streak ?? 0} />
-            <DashboardStat label="Live" value={live.length} />
+          <div className="dashboard-actions">
+            <LeagueSwitch league={league} onChange={setLeague} />
+            <div className="dashboard-stats">
+              <DashboardStat label="Points" value={user?.total_points ?? 0} />
+              <DashboardStat label="Streak" value={user?.login_streak ?? 0} />
+              <DashboardStat label="Live" value={live.length} />
+            </div>
           </div>
         </header>
 
@@ -192,7 +240,7 @@ export default function Feed() {
             <div className="dashboard-panel span-2">
               <div className="panel-heading">
                 <div>
-                  <span>{onboarded ? "For you" : "Recent games"}</span>
+                  <span>{onboarded ? `${league} for you` : `${league} recent games`}</span>
                   <h2>{onboarded ? "Personalized feed" : "Start with recent games"}</h2>
                 </div>
                 <Link to="/predictions">Make picks</Link>
@@ -240,17 +288,25 @@ export default function Feed() {
           <section className="dashboard-panel">
             <div className="panel-heading">
               <div>
-                <span>Every 30 seconds</span>
-                <h2>Live game feed</h2>
+                <span>{league} every 30 seconds</span>
+                <h2>Live highlight control room</h2>
               </div>
+              <a href={LEAGUE_META[league].stream} target="_blank" rel="noreferrer">ESPN hub</a>
             </div>
-            {live.length === 0 ? (
-              <p className="empty-state">No live games right now. Scheduled and final games still appear in your feed.</p>
-            ) : (
-              <div className="games-grid compact">
-                {live.map((game) => <ScoreCard key={game.id} game={game} />)}
+            <div className="live-command-grid">
+              <div className="live-rink">
+                <div className="live-rink-line" />
+                <div className="live-puck">{league}</div>
+                <div className="live-rink-copy">
+                  <strong>{live.length ? `${live.length} games live` : "No live games right now"}</strong>
+                  <span>When games are active, this panel becomes the fast lane into highlights, play timeline, and recap generation.</span>
+                </div>
               </div>
-            )}
+              <SignalBoard league={league} />
+            </div>
+            <div className="games-grid compact">
+              {live.map((game) => <ScoreCard key={game.id} game={game} />)}
+            </div>
           </section>
         )}
 
@@ -259,10 +315,20 @@ export default function Feed() {
             <div className="panel-heading">
               <div>
                 <span>Conversational layer</span>
-                <h2>Ask ReplaysAI</h2>
+                <h2>Ask ReplaysAI about {league}</h2>
               </div>
+              <a href={LEAGUE_META[league].search} target="_blank" rel="noreferrer">Google highlights</a>
             </div>
-            <AssistantChat games={games} />
+            <div className="research-layout">
+              <AssistantChat games={games} league={league} />
+              <aside className="research-panel">
+                <strong>Research rails</strong>
+                <a href={LEAGUE_META[league].search} target="_blank" rel="noreferrer">Search today&apos;s highlights</a>
+                <a href={LEAGUE_META[league].stream} target="_blank" rel="noreferrer">Open ESPN league page</a>
+                <Link to="/roster">Simulate roster impact</Link>
+                <Link to="/predictions">Turn answer into a pick</Link>
+              </aside>
+            </div>
           </section>
         )}
 
@@ -270,14 +336,22 @@ export default function Feed() {
           <section className="dashboard-panel">
             <div className="panel-heading">
               <div>
-                <span>Forecast</span>
-                <h2>Upcoming picks</h2>
+                <span>{league} forecast</span>
+                <h2>Prediction board</h2>
               </div>
               <Link to="/predictions">Open picks</Link>
             </div>
+            <div className="prediction-stage">
+              <div className="prediction-orbit">
+                <span>Model</span>
+                <strong>{league === "NBA" ? "Pace + shot profile" : "Drive + field position"}</strong>
+                <small>Use live context, matchup history, and roster form before locking picks.</small>
+              </div>
+              <SignalBoard league={league} />
+            </div>
             <div className="prediction-queue">
-              {upcomingGames.length === 0 && <p className="empty-state">No scheduled games available for picks.</p>}
-              {upcomingGames.slice(0, 6).map((game: { id: number; sport: string; home_team: { name: string }; away_team: { name: string }; game_date: string | null }) => (
+              {leagueUpcoming.length === 0 && <p className="empty-state">No scheduled {league} games available for picks.</p>}
+              {leagueUpcoming.slice(0, 6).map((game: { id: number; sport: string; home_team: { name: string }; away_team: { name: string }; game_date: string | null }) => (
                 <Link to="/predictions" key={game.id} className="prediction-row">
                   <span>{game.sport}</span>
                   <strong>{game.away_team.name} at {game.home_team.name}</strong>
@@ -292,10 +366,20 @@ export default function Feed() {
           <section className="dashboard-panel">
             <div className="panel-heading">
               <div>
-                <span>What-if lab</span>
-                <h2>Roster outlook</h2>
+                <span>{league} what-if lab</span>
+                <h2>Roster simulator</h2>
               </div>
               <Link to="/roster">Build roster</Link>
+            </div>
+            <div className="simulator-strip">
+              <div>
+                <span>Scenario</span>
+                <strong>{league === "NBA" ? "Small-ball closing lineup" : "Pass-heavy two-minute drill"}</strong>
+              </div>
+              <div>
+                <span>Projection</span>
+                <strong>{topRosterPlayers.length ? `+${Math.round(topRosterPlayers[0].impact_score)} impact` : "Waiting for players"}</strong>
+              </div>
             </div>
             <div className="roster-outlook">
               {topRosterPlayers.length === 0 && <p className="empty-state">No players loaded yet. Backfill box scores to unlock forecasts.</p>}

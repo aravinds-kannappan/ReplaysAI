@@ -8,7 +8,7 @@ Replays AI is a personalized sports fan platform that combines real play-by-play
 
 Sports media has a content abundance problem: every game generates hours of footage, thousands of structured events, and an audience that wants personalized, contextual highlights — not a broadcast edited for the median fan.
 
-Replays AI closes this gap by ingesting structured play-by-play data, aligning it to video via computer vision, and using LLMs to generate recaps that reflect how a specific fan watches the game. The product is now organized around a Sleeper-style command center after login: personalized feed, live game stream, assistant chat, predictions, roster outlook, and agent status tabs in one place.
+Replays AI closes this gap by ingesting structured play-by-play data, aligning it to video via computer vision, and using LLMs to generate recaps that reflect how a specific fan watches the game. The product is now organized around a command center after login: personalized feed, live game stream, assistant chat, predictions, roster outlook, and agent status tabs in one place.
 
 ---
 
@@ -97,6 +97,23 @@ Pick up to 8 players per week (NBA or NFL). Players are materialized from box sc
 
 ### Personalization Data Loading
 `/api/teams` now self-seeds NBA and NFL team rows if the database is empty, so onboarding can load teams before a full historical backfill. `/api/rosters/players` also repairs older box-score-only ingestions by creating missing `players` records and linking them to `player_game_stats`.
+
+### ESPN Public API Keys
+ESPN's public endpoints do not require API keys. The relevant sport/league slugs are:
+
+| League | Sport key | League key |
+|--------|-----------|------------|
+| NBA | `basketball` | `nba` |
+| NFL | `football` | `nfl` |
+
+Fallback endpoints used by the app:
+
+```text
+NBA teams:    https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams
+NFL teams:    https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams
+NBA players:  https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba/statistics/byathlete
+NFL players:  https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/statistics/byathlete
+```
 
 ### Gamification
 

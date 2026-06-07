@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from cache.redis_client import cache_get, cache_set
+from api.espn_public import fetch_espn_teams
 from db.models import Game, Team
 from db.session import get_db
 
@@ -71,12 +72,29 @@ def get_rankings(sport: Optional[str] = Query(None), db: Session = Depends(get_d
 
 @router.get("/teams")
 def get_teams(sport: Optional[str] = Query(None), db: Session = Depends(get_db)):
-    if db.query(Team).count() == 0:
-        from ingestion.nba_ingester import _upsert_nba_teams
-        from ingestion.nfl_ingester import _upsert_nfl_teams
-
-        _upsert_nba_teams(db)
-        _upsert_nfl_teams(db)
+    sports_to_seed = [sport.upper()] if sport else ["NBA", "NFL"]
+    for sport_key in sports_to_seed:
+        if db.query(Team).filter(Team.sport == sport_key).count() > 0:
+            continue
+        try:
+            for team_data in fetch_espn_teams(sport_key):
+                if not db.query(Team).filter_by(abbreviation=team_data["abbreviation"], sport=sport_key).first():
+                    db.add(Team(
+                        name=team_data["name"],
+                        abbreviation=team_data["abbreviation"],
+                        sport=sport_key,
+                        conference=team_data["conference"],
+                        division=team_data["division"],
+                    ))
+            db.commit()
+        except Exception:
+            db.rollback()
+            if sport_key == "NBA":
+                from ingestion.nba_ingester import _upsert_nba_teams
+                _upsert_nba_teams(db)
+            elif sport_key == "NFL":
+                from ingestion.nfl_ingester import _upsert_nfl_teams
+                _upsert_nfl_teams(db)
 
     q = db.query(Team)
     if sport:

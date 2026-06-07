@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from api.espn_public import fetch_espn_athletes
 from db.models import Play, Player, PlayerGameStat, Team, User, UserRoster
 from db.session import get_db
 from middleware.clerk_auth import get_current_user
@@ -114,6 +115,13 @@ def available_players(sport: Optional[str] = None, db: Session = Depends(get_db)
     if sport:
         q = q.filter(Team.sport == sport.upper())
     players = q.limit(150).all()
+
+    if not players and sport:
+        try:
+            return fetch_espn_athletes(sport.upper(), limit=100)
+        except Exception:
+            return []
+
     result = []
     for p in players:
         score = _player_impact_score(p.id, db)
