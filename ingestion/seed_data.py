@@ -2,7 +2,7 @@
 seed_data.py — Master backfill script for Replays AI.
 
 Usage:
-  python -m ingestion.seed_data               # all sports, 5 seasons
+  python -m ingestion.seed_data               # all sports, 10 seasons
   python -m ingestion.seed_data --sport nba   # NBA only
   python -m ingestion.seed_data --sport nfl   # NFL only
   python -m ingestion.seed_data --seasons 2   # last 2 seasons
@@ -83,8 +83,8 @@ def main() -> None:
     )
     parser.add_argument("--sport", choices=["nba", "nfl", "all"], default="all",
                         help="Sport to backfill (default: all)")
-    parser.add_argument("--seasons", type=int, default=5,
-                        help="Number of past seasons to fetch (default: 5)")
+    parser.add_argument("--seasons", type=int, default=10,
+                        help="Number of past seasons to fetch (default: 10)")
     parser.add_argument("--metadata-only", action="store_true",
                         help="Only fetch game metadata — skip play-by-play & box scores (fast)")
     parser.add_argument("--no-boxscores", action="store_true",

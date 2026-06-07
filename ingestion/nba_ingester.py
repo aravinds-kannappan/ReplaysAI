@@ -6,7 +6,7 @@ Two modes:
   • run_live_refresh()         – updates today's / in-progress games only
 
 Run directly:
-  python -m ingestion.nba_ingester --mode backfill --seasons 5
+  python -m ingestion.nba_ingester --mode backfill --seasons 10
   python -m ingestion.nba_ingester --mode live
 """
 import argparse
@@ -27,11 +27,17 @@ ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba"
 
 # Approximate NBA season date windows  (season label → (start, end))
 NBA_SEASONS = {
+    "2015-16": (date(2015, 10, 27), date(2016, 6, 19)),
+    "2016-17": (date(2016, 10, 25), date(2017, 6, 12)),
+    "2017-18": (date(2017, 10, 17), date(2018, 6, 8)),
+    "2018-19": (date(2018, 10, 16), date(2019, 6, 13)),
+    "2019-20": (date(2019, 10, 22), date(2020, 10, 11)),
     "2020-21": (date(2020, 12, 22), date(2021, 7, 22)),
     "2021-22": (date(2021, 10, 19), date(2022, 6, 16)),
     "2022-23": (date(2022, 10, 18), date(2023, 6, 12)),
     "2023-24": (date(2023, 10, 24), date(2024, 6, 17)),
     "2024-25": (date(2024, 10, 22), date(2025, 6, 30)),
+    "2025-26": (date(2025, 10, 21), date(2026, 6, 30)),
 }
 
 REQUEST_DELAY = 0.45  # seconds between ESPN calls
@@ -266,6 +272,28 @@ def _ingest_boxscore(db: Session, game_db_id: int, summary: dict, abbr_to_id: di
                 if not player_name:
                     continue
 
+                external_player_id = athlete.get("id")
+                player = None
+                namespaced_player_id = f"{SPORT.lower()}:{external_player_id}" if external_player_id else None
+                if namespaced_player_id:
+                    player = db.query(Player).filter_by(external_id=namespaced_player_id).first()
+                if not player:
+                    player = (
+                        db.query(Player)
+                        .filter(Player.name == player_name, Player.team_id == team_id_db)
+                        .first()
+                    )
+                if not player:
+                    player = Player(
+                        name=player_name,
+                        team_id=team_id_db,
+                        position=athlete.get("position", {}).get("abbreviation") if isinstance(athlete.get("position"), dict) else None,
+                        jersey_number=_safe_int(athlete.get("jersey")),
+                        external_id=namespaced_player_id,
+                    )
+                    db.add(player)
+                    db.flush()
+
                 # Check not already stored
                 existing = db.query(PlayerGameStat).filter_by(game_id=game_db_id, player_name=player_name).first()
                 if existing:
@@ -303,6 +331,7 @@ def _ingest_boxscore(db: Session, game_db_id: int, summary: dict, abbr_to_id: di
 
                 db.add(PlayerGameStat(
                     game_id=game_db_id,
+                    player_id=player.id,
                     team_id=team_id_db,
                     player_name=player_name,
                     minutes=minutes,
@@ -459,7 +488,7 @@ def run_live_refresh(days_back: int = 3) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="NBA data ingestion")
     parser.add_argument("--mode", choices=["backfill", "live"], default="live")
-    parser.add_argument("--seasons", type=int, default=5, help="Number of seasons to backfill")
+    parser.add_argument("--seasons", type=int, default=10, help="Number of seasons to backfill")
     parser.add_argument("--no-plays", action="store_true", help="Skip play-by-play (faster)")
     parser.add_argument("--no-boxscores", action="store_true", help="Skip box scores")
     args = parser.parse_args()

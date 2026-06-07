@@ -1,14 +1,16 @@
 """
 Fantasy-lite: solo weekly roster builder.
 """
+import hashlib
 from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from db.models import Play, Player, Team, User, UserRoster
+from db.models import Play, Player, PlayerGameStat, Team, User, UserRoster
 from db.session import get_db
 from middleware.clerk_auth import get_current_user
 
@@ -21,13 +23,81 @@ def _current_week_label() -> str:
 
 
 def _player_impact_score(player_id: int, db: Session) -> float:
+    stat_rows = db.query(PlayerGameStat).filter_by(player_id=player_id).all()
+    if stat_rows:
+        total = sum(
+            (row.points or 0)
+            + (row.assists or 0) * 1.5
+            + (row.rebounds or 0) * 1.2
+            + (row.blocks or 0) * 3
+            + (row.steals or 0) * 3
+            - (row.turnovers or 0)
+            for row in stat_rows
+        )
+        return round(total / max(1, len(stat_rows)), 1)
+
     plays = db.query(Play).filter_by(player_id=player_id).all()
-    score = sum(
-        {"dunk": 5, "three_pointer": 4, "block": 3, "steal": 3, "assist": 2,
-         "touchdown": 6, "pass_complete": 1, "sack": 3, "interception": 4}.get(p.play_type, 0)
+    play_score = sum(
+        {
+            "dunk": 5,
+            "three_pointer": 4,
+            "block": 3,
+            "steal": 3,
+            "assist": 2,
+            "touchdown": 6,
+            "pass_complete": 1,
+            "sack": 3,
+            "interception": 4,
+        }.get(p.play_type, 0)
         for p in plays
     )
-    return round(score / max(1, len({p.game_id for p in plays})), 1)
+    return round(play_score / max(1, len({p.game_id for p in plays})), 1)
+
+
+def _materialize_players_from_boxscores(db: Session, sport: Optional[str]) -> None:
+    """Create Player rows for historical box score names that were ingested before players existed."""
+    q = (
+        db.query(
+            PlayerGameStat.player_name,
+            PlayerGameStat.team_id,
+            func.count(PlayerGameStat.id).label("games_played"),
+        )
+        .join(Team, PlayerGameStat.team_id == Team.id, isouter=True)
+        .filter(PlayerGameStat.player_id.is_(None), PlayerGameStat.player_name.isnot(None))
+    )
+    if sport:
+        q = q.filter(Team.sport == sport.upper())
+
+    rows = q.group_by(PlayerGameStat.player_name, PlayerGameStat.team_id).limit(300).all()
+    changed = False
+
+    for player_name, team_id, _games_played in rows:
+        if not player_name:
+            continue
+        player = (
+            db.query(Player)
+            .filter(Player.name == player_name, Player.team_id == team_id)
+            .first()
+        )
+        if not player:
+            external_key = hashlib.sha1(f"{team_id or 'na'}:{player_name}".encode("utf-8")).hexdigest()[:24]
+            player = Player(
+                name=player_name,
+                team_id=team_id,
+                position=None,
+                external_id=f"box:{external_key}",
+            )
+            db.add(player)
+            db.flush()
+
+        db.query(PlayerGameStat).filter_by(player_name=player_name, team_id=team_id).update(
+            {PlayerGameStat.player_id: player.id},
+            synchronize_session=False,
+        )
+        changed = True
+
+    if changed:
+        db.commit()
 
 
 @router.get("")
@@ -38,10 +108,12 @@ def list_rosters(user: User = Depends(get_current_user), db: Session = Depends(g
 
 @router.get("/players")
 def available_players(sport: Optional[str] = None, db: Session = Depends(get_db)):
+    _materialize_players_from_boxscores(db, sport)
+
     q = db.query(Player).join(Team, Player.team_id == Team.id, isouter=True)
     if sport:
         q = q.filter(Team.sport == sport.upper())
-    players = q.limit(100).all()
+    players = q.limit(150).all()
     result = []
     for p in players:
         score = _player_impact_score(p.id, db)

@@ -1,6 +1,6 @@
 # Replays AI
 
-Replays AI is a personalized sports fan platform that combines real play-by-play data ingestion, computer vision, and LLM-powered recap generation with a gamified engagement layer — predictions, leaderboards, weekly rosters, and fan-perspective recaps written for your team specifically.
+Replays AI is a personalized sports fan platform that combines real play-by-play data ingestion, computer vision, and LLM-powered recap generation with a gamified engagement layer — predictions, leaderboards, weekly rosters, live dashboards, conversational analysis, and fan-perspective recaps written for your team specifically.
 
 ---
 
@@ -8,7 +8,7 @@ Replays AI is a personalized sports fan platform that combines real play-by-play
 
 Sports media has a content abundance problem: every game generates hours of footage, thousands of structured events, and an audience that wants personalized, contextual highlights — not a broadcast edited for the median fan.
 
-Replays AI closes this gap by ingesting structured play-by-play data, aligning it to video via computer vision, and using LLMs to generate recaps that reflect how a specific fan watches the game. A gamified engagement layer gives fans a reason to return every day.
+Replays AI closes this gap by ingesting structured play-by-play data, aligning it to video via computer vision, and using LLMs to generate recaps that reflect how a specific fan watches the game. The product is now organized around a Sleeper-style command center after login: personalized feed, live game stream, assistant chat, predictions, roster outlook, and agent status tabs in one place.
 
 ---
 
@@ -70,6 +70,16 @@ User layer: `users`, `user_favorite_teams`, `user_followed_players`, `prediction
 
 ## Features
 
+### Dashboard Command Center
+The authenticated app now opens into a tabbed dashboard:
+
+- Feed: personalized games, post-game recap queue, and agent activity
+- Live: live game stream with 30-second polling
+- Chat: conversational assistant surface grounded in loaded dashboard games
+- Predictions: upcoming pick queue with direct navigation to picks
+- Roster: top player impact outlook and roster builder entry point
+- Agents: ingest, recap, personalization, and forecast status cards
+
 ### AI Recaps
 Generated from real ESPN play-by-play via 3 parallel agents. Task-split structure: First Half, Second Half, Player Spotlight, Defining Moment. Sub-second retrieval from Redis cache after first generation.
 
@@ -83,7 +93,10 @@ Pick game winners before tipoff with an optional spread prediction. Auto-scored 
 Global ranking by total points. Shows prediction accuracy, current login streak, and badges earned. Your rank widget appears if you're outside the top 50.
 
 ### Weekly Roster Builder
-Pick up to 8 players per week (NBA or NFL). Players sorted by impact score from real play-by-play stats. Roster locks at week start.
+Pick up to 8 players per week (NBA or NFL). Players are materialized from box score ingestion and sorted by impact score from play-by-play or player stat rows. Roster locks at week start.
+
+### Personalization Data Loading
+`/api/teams` now self-seeds NBA and NFL team rows if the database is empty, so onboarding can load teams before a full historical backfill. `/api/rosters/players` also repairs older box-score-only ingestions by creating missing `players` records and linking them to `player_game_stats`.
 
 ### Gamification
 
@@ -219,14 +232,14 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ### 4. Seed historical data
 
 ```bash
-# Full backfill: all sports, last 5 seasons (runs for ~30-60 min)
+# Full backfill: all sports, last 10 seasons (long-running)
 python -m ingestion.seed_data
 
 # NBA only, 2 seasons, metadata only (fast, no play-by-play)
 python -m ingestion.seed_data --sport nba --seasons 2 --metadata-only
 
 # NFL only
-python -m ingestion.seed_data --sport nfl --seasons 5
+python -m ingestion.seed_data --sport nfl --seasons 10
 ```
 
 Start the live refresh scheduler after backfill:
@@ -367,14 +380,14 @@ python -m ingestion.seed_data --help
 
 options:
   --sport {nba,nfl,all}   Sport to backfill (default: all)
-  --seasons N             Number of past seasons (default: 5)
+  --seasons N             Number of past seasons (default: 10)
   --metadata-only         Skip play-by-play and box scores
   --no-boxscores          Skip player stat rows
 ```
 
 Approximate run times (with play-by-play and box scores):
-- NBA 5 seasons: 45-90 min (rate-limited to ~0.45s per request)
-- NFL 5 seasons: 20-40 min
+- NBA 10 seasons: 90-180 min (rate-limited to ~0.45s per request)
+- NFL 10 seasons: 40-80 min
 
 ### Live refresh
 

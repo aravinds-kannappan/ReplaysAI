@@ -6,7 +6,7 @@ Two modes:
   • run_live_refresh()         – updates current week's games only
 
 Run directly:
-  python -m ingestion.nfl_ingester --mode backfill --seasons 5
+  python -m ingestion.nfl_ingester --mode backfill --seasons 10
   python -m ingestion.nfl_ingester --mode live
 """
 import argparse
@@ -270,6 +270,29 @@ def _ingest_boxscore(db: Session, game_db_id: int, summary: dict, abbr_to_id: di
                 player_name = athlete.get("displayName", "")
                 if not player_name:
                     continue
+
+                external_player_id = athlete.get("id")
+                player = None
+                namespaced_player_id = f"{SPORT.lower()}:{external_player_id}" if external_player_id else None
+                if namespaced_player_id:
+                    player = db.query(Player).filter_by(external_id=namespaced_player_id).first()
+                if not player:
+                    player = (
+                        db.query(Player)
+                        .filter(Player.name == player_name, Player.team_id == team_id_db)
+                        .first()
+                    )
+                if not player:
+                    player = Player(
+                        name=player_name,
+                        team_id=team_id_db,
+                        position=athlete.get("position", {}).get("abbreviation") if isinstance(athlete.get("position"), dict) else None,
+                        jersey_number=_safe_int(athlete.get("jersey")),
+                        external_id=namespaced_player_id,
+                    )
+                    db.add(player)
+                    db.flush()
+
                 existing = db.query(PlayerGameStat).filter_by(game_id=game_db_id, player_name=player_name).first()
                 if existing:
                     continue
@@ -282,6 +305,7 @@ def _ingest_boxscore(db: Session, game_db_id: int, summary: dict, abbr_to_id: di
 
                 db.add(PlayerGameStat(
                     game_id=game_db_id,
+                    player_id=player.id,
                     team_id=team_id_db,
                     player_name=player_name,
                     minutes=None,
@@ -432,7 +456,7 @@ def run_live_refresh() -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="NFL data ingestion")
     parser.add_argument("--mode", choices=["backfill", "live"], default="live")
-    parser.add_argument("--seasons", type=int, default=5)
+    parser.add_argument("--seasons", type=int, default=10)
     parser.add_argument("--no-plays", action="store_true")
     parser.add_argument("--no-boxscores", action="store_true")
     args = parser.parse_args()

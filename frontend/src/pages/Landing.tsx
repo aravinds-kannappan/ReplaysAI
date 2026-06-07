@@ -1,135 +1,65 @@
 import { Link } from "react-router-dom";
 import { SignedIn, SignedOut } from "@clerk/clerk-react";
+import heroImage from "../assets/hero.png";
 import "./Landing.css";
 
-const STATS = [
-  { value: "400K+", label: "Plays Tracked" },
-  { value: "5", label: "Seasons" },
-  { value: "4", label: "AI Agents" },
-  { value: "2", label: "Sports" },
+const METRICS = [
+  { value: "NBA + NFL", label: "sports graph" },
+  { value: "10 seasons", label: "backfill target" },
+  { value: "60 sec", label: "live refresh" },
+  { value: "4 agents", label: "recap pipeline" },
 ];
 
-const FEATURES = [
-  {
-    icon: "🤖",
-    title: "Multi-Agent AI Pipeline",
-    desc: "Three specialized agents run in parallel via asyncio — event extraction, computer vision play classification with Claude Vision, and LLM summarization. Full recap in seconds, not minutes.",
-    accent: "orange",
-    tags: ["asyncio.gather", "Claude Vision", "OpenCV"],
-  },
-  {
-    icon: "🏀",
-    title: "Fan Mode Recaps",
-    desc: "Pick any game your team played. Claude rewrites the recap from your team's exact perspective — wins land with energy, losses get an honest post-mortem. Cached permanently after first generation.",
-    accent: "purple",
-    tags: ["Claude Sonnet", "Redis cache", "On-demand"],
-  },
-  {
-    icon: "🎯",
-    title: "Predictions + Points",
-    desc: "Pick game winners before tipoff across NBA and NFL. Add a spread prediction for bonus points. Every pick is auto-scored when the game goes final.",
-    accent: "pink",
-    tags: ["Auto-scored", "Spread bonus", "Both sports"],
-  },
-  {
-    icon: "🏆",
-    title: "Global Leaderboard",
-    desc: "Global ranking by prediction points. Badges for streaks, clutch picks, and consistent engagement. Your rank widget shows exactly where you stand among all users.",
-    accent: "blue",
-    tags: ["Global rank", "7 badges", "Streak tracking"],
-  },
-  {
-    icon: "📋",
-    title: "Weekly Roster Builder",
-    desc: "Pick up to 8 players per week from NBA or NFL rosters. Impact scores are computed from real play-by-play stats — every dunk, block, touchdown, and sack counts.",
-    accent: "green",
-    tags: ["Real stats", "NBA + NFL", "8 players"],
-  },
-  {
-    icon: "📊",
-    title: "Real ESPN Data",
-    desc: "5+ seasons of NBA and NFL play-by-play from ESPN. 17-table PostgreSQL schema covering teams, players, games, plays, box scores, CV outputs, recaps, and the full user layer.",
-    accent: "orange",
-    tags: ["5 seasons", "17 tables", "No mock data"],
-  },
+const WORKFLOWS = [
+  "Personal feed from favorite teams and players",
+  "Live game stream that turns into post-game summaries",
+  "Conversational assistant for what happened and what might happen next",
+  "Roster simulator for future-season and what-if analysis",
 ];
 
-const HOW_STEPS = [
-  {
-    num: "01",
-    cls: "how-num-1",
-    title: "Ingest",
-    desc: "ESPN play-by-play lands in PostgreSQL every 60 seconds during game hours — every dunk, stop, and fourth-quarter drive, structured and indexed.",
-  },
-  {
-    num: "02",
-    cls: "how-num-2",
-    title: "Extract",
-    desc: "Agent 1 computes momentum shifts, clutch moments, and top-performer impact scores in pure Python with no LLM cost — runs instantly.",
-  },
-  {
-    num: "03",
-    cls: "how-num-3",
-    title: "See",
-    desc: "Agent 2 downloads highlight video via yt-dlp, extracts frames with OpenCV, and classifies 14 play types using Claude Vision batch inference.",
-  },
-  {
-    num: "04",
-    cls: "how-num-4",
-    title: "Tell",
-    desc: "Agent 3 runs 4 parallel Claude calls for a structured recap. Agent 4 rewrites it from your team's fan perspective, cached permanently after first generation.",
-  },
+const AGENTS = [
+  { name: "Ingest", detail: "ESPN schedules, scores, plays, and box scores" },
+  { name: "Detect", detail: "Momentum swings, key moments, player impact" },
+  { name: "Explain", detail: "Recaps, fan angle, and post-game takeaways" },
+  { name: "Predict", detail: "Picks, roster outlook, and future scenarios" },
 ];
 
-const POINTS_ROWS = [
-  ["Correct prediction", "+100 pts"],
-  ["Spread within 5 pts", "+150 pts"],
-  ["Daily login", "+5 pts"],
-  ["7-day streak bonus", "+25 pts"],
-  ["First prediction of week", "+10 pts"],
-];
-
-const BADGES = ["🎯 First Pick", "🔮 Oracle", "🔥 Loyal Fan", "🏆 Superfan", "📊 Analyst", "⏱️ Clutch"];
-
-const TECH = [
-  { name: "FastAPI", color: "#009688" },
-  { name: "PostgreSQL 16", color: "#336791" },
-  { name: "Redis 7", color: "#DC382D" },
-  { name: "Claude Sonnet 4.6", color: "#8b5cf6" },
-  { name: "React 18", color: "#61DAFB" },
-  { name: "TypeScript", color: "#3178C6" },
-  { name: "Clerk Auth", color: "#6C47FF" },
-  { name: "OpenCV", color: "#5C8A32" },
-  { name: "yt-dlp", color: "#f59e0b" },
-  { name: "SQLAlchemy 2.0", color: "#B22222" },
-  { name: "Vite 8", color: "#646CFF" },
-  { name: "Vercel", color: "#ffffff" },
-];
-
-function MockGameCard() {
+function ProductPreview() {
   return (
-    <div className="mock-card">
-      <div className="mock-card-header">
-        <span className="mock-sport-badge">🏀 NBA</span>
-        <span className="mock-status final">Final</span>
+    <div className="product-preview" aria-label="Replays AI product preview">
+      <div className="preview-topbar">
+        <span className="preview-brand">ReplaysAI</span>
+        <span className="preview-live">Live</span>
       </div>
-      <div className="mock-card-teams">
-        <div className="mock-team">
-          <span className="mock-abbr">BOS</span>
-          <span className="mock-score winner">112</span>
-        </div>
-        <span className="mock-vs">vs</span>
-        <div className="mock-team">
-          <span className="mock-abbr">MIA</span>
-          <span className="mock-score">98</span>
-        </div>
-      </div>
-      <div className="mock-recap-preview">
-        "Jayson Tatum's 34-point fourth quarter sealed a dominant Celtics win. Boston's defense held Miami to 18 points in the final frame, forcing six turnovers in the clutch..."
-      </div>
-      <div className="mock-card-actions">
-        <span className="mock-action-btn purple">🏀 Fan Mode</span>
-        <span className="mock-action-btn orange">🎯 Predict Next</span>
+      <div className="preview-body">
+        <aside className="preview-rail">
+          {["Feed", "Games", "Roster", "Picks"].map((item, index) => (
+            <span key={item} className={index === 0 ? "active" : ""}>{item}</span>
+          ))}
+        </aside>
+        <main className="preview-main">
+          <div className="preview-game">
+            <div>
+              <span className="preview-label">Tonight</span>
+              <strong>LAL vs BOS</strong>
+            </div>
+            <span className="preview-score">104-101</span>
+          </div>
+          <div className="preview-feed-item">
+            <span className="preview-dot" />
+            <p>ReplaysAI flags a 14-2 run and drafts a Celtics-focused recap.</p>
+          </div>
+          <div className="preview-grid">
+            <div>
+              <span>Win model</span>
+              <strong>68%</strong>
+            </div>
+            <div>
+              <span>Roster outlook</span>
+              <strong>+11.4</strong>
+            </div>
+          </div>
+        </main>
       </div>
     </div>
   );
@@ -138,192 +68,93 @@ function MockGameCard() {
 export default function Landing() {
   return (
     <div className="landing">
-      <div className="orb orb-1" />
-      <div className="orb orb-2" />
-      <div className="orb orb-3" />
-      <div className="orb orb-4" />
-      <div className="particles">
-        {Array.from({ length: 12 }).map((_, i) => (
-          <div key={i} className="particle" />
-        ))}
-      </div>
-
-      {/* ── Hero ── */}
-      <section className="hero-section">
-        <div className="hero-eyebrow">
-          <span className="eyebrow-dot" />
-          NBA · NFL · Multimodal AI
-        </div>
-
-        <h1 className="hero-title">
-          Your sports platform.
-          <span className="line-2">Finally built right.</span>
-        </h1>
-
-        <p className="hero-sub">
-          Real ESPN play-by-play. Computer vision highlights. Claude-powered recaps written from
-          your team's exact perspective. Predictions that earn you points on a global leaderboard.
-          NBA and NFL — five seasons of real data, zero mock data.
-        </p>
-
-        <div className="hero-ctas">
-          <SignedOut>
-            <Link to="/sign-up" className="btn-hero-primary">Get Started Free →</Link>
-            <Link to="/sign-in" className="btn-hero-ghost">Sign In</Link>
-          </SignedOut>
-          <SignedIn>
-            <Link to="/feed" className="btn-hero-primary">Go to My Feed →</Link>
-          </SignedIn>
-        </div>
-
-        <div className="hero-stats">
-          {STATS.map((s) => (
-            <div key={s.label} className="stat-pill">
-              <span className="stat-pill-value">{s.value}</span>
-              <span className="stat-pill-label">{s.label}</span>
-            </div>
-          ))}
-        </div>
-
-        <div className="hero-preview-wrap">
-          <MockGameCard />
-        </div>
-
-        <div className="scroll-hint">
-          <span>Scroll</span>
-          <div className="scroll-arrow" />
-        </div>
-      </section>
-
-      {/* ── Sports coverage banner ── */}
-      <section className="sports-banner">
-        <div className="sports-banner-inner">
-          <span className="sports-label-text">Live coverage for</span>
-          <div className="sport-badge-pill nba">🏀 NBA</div>
-          <span className="sports-and">+</span>
-          <div className="sport-badge-pill nfl">🏈 NFL</div>
-          <span className="sports-label-text">· 5 seasons · real ESPN data · updated every 60 seconds</span>
-        </div>
-      </section>
-
-      {/* ── Features grid ── */}
-      <section className="features-section">
-        <div className="section-label">What you get</div>
-        <h2>Six features. Zero filler.</h2>
-        <p className="section-sub">
-          Everything is backed by real data, real AI agents, and real ESPN play-by-play.
-          Nothing is mocked up, projected, or estimated.
-        </p>
-
-        <div className="features-grid-6">
-          {FEATURES.map((f) => (
-            <div key={f.title} className={`feat-card accent-${f.accent}`}>
-              <span className="feat-icon">{f.icon}</span>
-              <h3>{f.title}</h3>
-              <p>{f.desc}</p>
-              <div className="feat-tags">
-                {f.tags.map((t) => <span key={t} className="feat-tag">{t}</span>)}
+      <section className="landing-hero">
+        <div className="landing-copy">
+          <p className="landing-kicker">Sports intelligence for the personalized fan era</p>
+          <h1>ReplaysAI</h1>
+          <p className="landing-subtitle">
+            A Sleeper-style home for NBA and NFL fans where every live game becomes a personalized
+            feed, a clear recap, a prediction surface, and a roster simulation.
+          </p>
+          <div className="landing-actions">
+            <SignedOut>
+              <Link to="/sign-up" className="landing-primary">Start tracking your teams</Link>
+              <Link to="/sign-in" className="landing-secondary">Sign in</Link>
+            </SignedOut>
+            <SignedIn>
+              <Link to="/feed" className="landing-primary">Open dashboard</Link>
+            </SignedIn>
+          </div>
+          <div className="landing-proof">
+            {METRICS.map((metric) => (
+              <div key={metric.label}>
+                <strong>{metric.value}</strong>
+                <span>{metric.label}</span>
               </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ── Pipeline ── */}
-      <section className="pipeline-section">
-        <div className="section-label">Under the hood</div>
-        <h2>Four agents. One recap.</h2>
-        <p className="section-sub">
-          The most expensive steps — CV inference and LLM generation — run concurrently via{" "}
-          <code className="inline-code">asyncio.gather()</code>. Sub-second retrieval on repeat
-          visits thanks to Redis permanent caching.
-        </p>
-
-        <div className="how-timeline">
-          {HOW_STEPS.map((s) => (
-            <div key={s.num} className="how-step">
-              <div className={`how-num ${s.cls}`}>{s.num}</div>
-              <h4>{s.title}</h4>
-              <p>{s.desc}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ── Points & Badges ── */}
-      <section className="points-section">
-        <div className="points-inner">
-          <div className="points-left">
-            <div className="section-label">Gamification</div>
-            <h2>Every action earns points.</h2>
-            <p>
-              Pick games before tipoff, predict the spread for bonus points, log in daily,
-              build streaks. Points accumulate on a global leaderboard with six badges to earn
-              for consistency, clutch picks, and engagement.
-            </p>
-            <div className="badges-row">
-              {BADGES.map((b) => (
-                <span key={b} className="badge-chip">{b}</span>
-              ))}
-            </div>
-          </div>
-          <div className="points-right">
-            <div className="points-table-card">
-              <div className="points-table-header">Action → Points</div>
-              {POINTS_ROWS.map(([action, pts]) => (
-                <div key={action} className="points-row-item">
-                  <span>{action}</span>
-                  <span className="pts-val">{pts}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Tech stack ── */}
-      <section className="tech-section">
-        <div className="section-label">Stack</div>
-        <h2>A serious stack for a serious platform.</h2>
-        <p className="section-sub">
-          17-table PostgreSQL schema. Async FastAPI backend. Redis permanent caching.
-          Claude Sonnet 4.6 for text and vision. Clerk JWT auth. Deployed on Vercel.
-        </p>
-        <div className="tech-chips">
-          {TECH.map((t) => (
-            <span
-              key={t.name}
-              className="tech-chip"
-              style={{ borderColor: t.color + "55", color: t.color }}
-            >
-              {t.name}
-            </span>
-          ))}
-        </div>
-      </section>
-
-      {/* ── CTA ── */}
-      <section className="cta-section">
-        <div className="cta-card">
-          <h2>Your team deserves better recaps.</h2>
-          <p>Free forever. Pick your teams in 60 seconds. Personalized feed starts immediately.</p>
-          <div className="cta-badges">
-            {["🎯 Smart Predictions", "🏀🏈 NBA + NFL", "🏆 Leaderboard", "📊 Real Play Data"].map((b) => (
-              <span key={b} className="cta-badge">{b}</span>
             ))}
           </div>
-          <SignedOut>
-            <Link to="/sign-up" className="btn-hero-primary">Create Free Account</Link>
-          </SignedOut>
-          <SignedIn>
-            <Link to="/feed" className="btn-hero-primary">Go to My Feed →</Link>
-          </SignedIn>
+        </div>
+
+        <div className="landing-visual">
+          <img src={heroImage} alt="" className="hero-mark" />
+          <ProductPreview />
         </div>
       </section>
 
-      <footer className="landing-footer">
-        Replays AI · NBA + NFL · Claude Sonnet 4.6 · Computer Vision · Real ESPN Data
-      </footer>
+      <section className="landing-section problem-section">
+        <div>
+          <p className="section-eyebrow">Why now</p>
+          <h2>Sports content is everywhere. Personalized context is still missing.</h2>
+        </div>
+        <p>
+          Fans do not just want scores. They want to know why the game moved, how it affects their
+          teams, which players matter next, and what to do before the next matchup. ReplaysAI
+          turns structured sports data into a daily command center for that loop.
+        </p>
+      </section>
+
+      <section className="landing-section workflow-section">
+        <div>
+          <p className="section-eyebrow">Product</p>
+          <h2>One dashboard after login. Four daily jobs.</h2>
+        </div>
+        <div className="workflow-list">
+          {WORKFLOWS.map((workflow) => (
+            <div key={workflow} className="workflow-row">
+              <span />
+              <p>{workflow}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="landing-section agent-section">
+        <div>
+          <p className="section-eyebrow">System</p>
+          <h2>Agents handle the dashboard, not just the recap.</h2>
+        </div>
+        <div className="agent-grid">
+          {AGENTS.map((agent) => (
+            <div key={agent.name} className="agent-card">
+              <strong>{agent.name}</strong>
+              <p>{agent.detail}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="landing-section cta-band">
+        <div>
+          <p className="section-eyebrow">Next game</p>
+          <h2>Follow teams, build a roster, and let the app explain the season as it unfolds.</h2>
+        </div>
+        <SignedOut>
+          <Link to="/sign-up" className="landing-primary">Create account</Link>
+        </SignedOut>
+        <SignedIn>
+          <Link to="/feed" className="landing-primary">Go to dashboard</Link>
+        </SignedIn>
+      </section>
     </div>
   );
 }

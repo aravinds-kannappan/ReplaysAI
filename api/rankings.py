@@ -71,6 +71,13 @@ def get_rankings(sport: Optional[str] = Query(None), db: Session = Depends(get_d
 
 @router.get("/teams")
 def get_teams(sport: Optional[str] = Query(None), db: Session = Depends(get_db)):
+    if db.query(Team).count() == 0:
+        from ingestion.nba_ingester import _upsert_nba_teams
+        from ingestion.nfl_ingester import _upsert_nfl_teams
+
+        _upsert_nba_teams(db)
+        _upsert_nfl_teams(db)
+
     q = db.query(Team)
     if sport:
         q = q.filter(Team.sport == sport.upper())
