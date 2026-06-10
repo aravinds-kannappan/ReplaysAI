@@ -1,6 +1,6 @@
 """
 YouTube Data API v3 search for game highlight videos.
-Falls back to constructing a search URL when no API key is available.
+When no API key is available, returns a YouTube results URL for the same real matchup query.
 """
 import httpx
 from typing import Optional

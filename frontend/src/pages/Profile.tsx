@@ -8,6 +8,7 @@ type FavoriteTeam = {
   id: number;
   name: string;
   abbreviation: string;
+  sport: string;
 };
 
 type Badge = {
@@ -74,7 +75,7 @@ export default function Profile() {
           <h3>My Teams</h3>
           <div className="team-chips-row">
             {(user.favorite_teams as FavoriteTeam[]).map((t) => (
-              <span key={t.id} className="team-chip selected">
+              <span key={`${t.sport}:${t.abbreviation}`} className="team-chip selected">
                 <span className="chip-abbr">{t.abbreviation}</span>
                 <span className="chip-name">{t.name}</span>
               </span>

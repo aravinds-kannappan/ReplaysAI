@@ -57,7 +57,7 @@ export default function Onboarding() {
     if (!teams.length) return;
     window.localStorage.setItem("replaysai:onboarded", "true");
     window.localStorage.setItem("replaysai:teams", JSON.stringify(teams));
-    teams.forEach((team) => addTeam.mutate({ team_id: team.id, sport: team.sport }));
+    teams.forEach((team) => addTeam.mutate(team));
     navigate("/feed");
   }
 

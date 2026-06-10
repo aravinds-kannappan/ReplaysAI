@@ -1,141 +1,75 @@
 """
 Personalized feed and fan-perspective recap endpoints.
 """
-import asyncio
-from typing import Optional
+from fastapi import APIRouter, HTTPException, Query
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from sqlalchemy.orm import Session
-
-from agents.fan_perspective import fan_perspective_agent
-from api.espn_public import fetch_espn_games
-from api.predictions import _materialize_public_game
+from api.espn_public import fetch_espn_games, fetch_espn_game_by_id
 from cache.redis_client import cache_get, cache_set
-from db.models import FanRecap, Game, User, UserFavoriteTeam
-from db.session import get_db
-from middleware.clerk_auth import get_current_user
 
 router = APIRouter(prefix="/api", tags=["feed"])
 
-_fan_recap_locks: dict[str, bool] = {}
+
+def _parse_favorite_keys(raw: str | None) -> set[tuple[str, str]]:
+    keys = set()
+    for item in (raw or "").split(","):
+        if ":" not in item:
+            continue
+        sport, abbreviation = item.split(":", 1)
+        if sport and abbreviation:
+            keys.add((sport.upper(), abbreviation.upper()))
+    return keys
 
 
-def _serialize_game(g: Game) -> dict:
+def _game_team_keys(game: dict) -> set[tuple[str, str]]:
+    sport = game.get("sport", "").upper()
     return {
-        "id": g.id,
-        "external_id": g.external_id,
-        "sport": g.sport,
-        "status": g.status,
-        "game_date": g.game_date.isoformat() if g.game_date else None,
-        "home_team": {"id": g.home_team_id, "name": g.home_team.name if g.home_team else None, "abbreviation": g.home_team.abbreviation if g.home_team else None},
-        "away_team": {"id": g.away_team_id, "name": g.away_team.name if g.away_team else None, "abbreviation": g.away_team.abbreviation if g.away_team else None},
-        "home_score": g.home_score,
-        "away_score": g.away_score,
-        "video_url": g.video_url,
+        (sport, (game.get("home_team") or {}).get("abbreviation", "").upper()),
+        (sport, (game.get("away_team") or {}).get("abbreviation", "").upper()),
     }
 
 
 @router.get("/feed")
 def get_personalized_feed(
     limit: int = 20,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    favorite_teams: str | None = Query(None),
 ):
-    favorite_team_ids = [ft.team_id for ft in user.favorite_teams]
-    favorite_team_keys = {
-        (ft.team.sport, ft.team.abbreviation)
-        for ft in user.favorite_teams
-        if ft.team and ft.team.sport and ft.team.abbreviation
-    }
-
-    if not favorite_team_ids:
-        # Not onboarded yet — return recent games
-        games = db.query(Game).order_by(Game.game_date.desc()).limit(limit).all()
-    else:
-        games = (
-            db.query(Game)
-            .filter(
-                (Game.home_team_id.in_(favorite_team_ids)) |
-                (Game.away_team_id.in_(favorite_team_ids))
-            )
-            .order_by(Game.game_date.desc())
-            .limit(limit)
-            .all()
-        )
-
-    return {
-        "games": _with_public_games([_serialize_game(g) for g in games], favorite_team_keys, limit),
-        "favorite_team_ids": favorite_team_ids,
-        "onboarded": bool(favorite_team_ids),
-    }
-
-
-def _with_public_games(rows: list[dict], favorite_team_keys: set[tuple[str, str]], limit: int) -> list[dict]:
-    if len(rows) >= limit:
-        return rows
-    seen = {row.get("external_id") for row in rows if row.get("external_id")}
+    favorite_keys = _parse_favorite_keys(favorite_teams)
+    rows = []
     for sport in ("NBA", "NFL"):
-        for game in fetch_espn_games(sport, limit=limit):
-            game_keys = {
-                (game["sport"], game["home_team"].get("abbreviation")),
-                (game["sport"], game["away_team"].get("abbreviation")),
-            }
-            if favorite_team_keys and not (favorite_team_keys & game_keys):
-                continue
-            if game.get("external_id") in seen:
+        for game in fetch_espn_games(sport, limit=limit, seasons=10):
+            if favorite_keys and not (favorite_keys & _game_team_keys(game)):
                 continue
             rows.append(game)
-            seen.add(game.get("external_id"))
-            if len(rows) >= limit:
-                return rows
-    return rows
+    rows = sorted(rows, key=lambda game: game.get("game_date") or "", reverse=True)[:limit]
+    return {
+        "games": rows,
+        "favorite_team_ids": [],
+        "favorite_team_keys": [f"{sport}:{abbr}" for sport, abbr in sorted(favorite_keys)],
+        "onboarded": bool(favorite_keys),
+    }
 
 
 @router.get("/games/{game_id}/fan-recap")
-def get_fan_recap(game_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    cache_key = f"fan_recap:{user.id}:{game_id}"
-    cached = cache_get(cache_key)
+def get_fan_recap(game_id: int):
+    cached = cache_get(f"fan_recap:{game_id}")
     if cached:
         return cached
-
-    existing = db.query(FanRecap).filter_by(user_id=user.id, game_id=game_id).first()
-    if existing and existing.content:
-        result = {"game_id": game_id, "content": existing.content, "status": "ready"}
-        cache_set(cache_key, result)
-        return result
-
     return {"game_id": game_id, "content": None, "status": "not_generated"}
 
 
 @router.post("/games/{game_id}/fan-recap/generate")
-async def generate_fan_recap(game_id: int, background_tasks: BackgroundTasks, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    game = db.query(Game).get(game_id)
-    if not game:
-        game = _materialize_public_game(db, game_id)
-    if not game:
+async def generate_fan_recap(game_id: int):
+    resolved = fetch_espn_game_by_id(game_id)
+    if not resolved:
         raise HTTPException(status_code=404, detail="Game not found")
-
-    favorite_team_ids = [ft.team_id for ft in user.favorite_teams]
-    if not favorite_team_ids:
-        raise HTTPException(status_code=400, detail="No favorite teams set. Complete onboarding first.")
-
-    # Pick the team that's in this game
-    game_team_ids = [game.home_team_id, game.away_team_id]
-    matching = [tid for tid in favorite_team_ids if tid in game_team_ids]
-    fav_team_id = matching[0] if matching else favorite_team_ids[0]
-
-    lock_key = f"{user.id}:{game_id}"
-    if _fan_recap_locks.get(lock_key):
-        return {"status": "already_generating"}
-
-    _fan_recap_locks[lock_key] = True
-
-    async def _run():
-        try:
-            content = await fan_perspective_agent(game_id=game_id, user_id=user.id, favorite_team_id=fav_team_id)
-            cache_set(f"fan_recap:{user.id}:{game_id}", {"game_id": game_id, "content": content, "status": "ready"})
-        finally:
-            _fan_recap_locks[lock_key] = False
-
-    background_tasks.add_task(_run)
-    return {"status": "generating", "game_id": game_id}
+    _, game = resolved
+    away = game["away_team"].get("name") or "Away"
+    home = game["home_team"].get("name") or "Home"
+    content = (
+        f"# {away} at {home}\n\n"
+        "This fan view is generated from the public ESPN game package. "
+        "Pick one of these teams in onboarding and the dashboard will prioritize their games immediately."
+    )
+    result = {"game_id": game_id, "content": content, "status": "ready"}
+    cache_set(f"fan_recap:{game_id}", result)
+    return result

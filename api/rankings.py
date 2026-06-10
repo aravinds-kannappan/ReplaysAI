@@ -1,164 +1,70 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, Query
-from sqlalchemy import text
-from sqlalchemy.orm import Session
 from typing import Optional
 
+from fastapi import APIRouter, Query
+
 from cache.redis_client import cache_get, cache_set
-from api.espn_public import fetch_espn_teams
-from db.models import Game, Team
-from db.session import get_db
+from api.espn_public import fetch_espn_games, fetch_espn_teams
 
 router = APIRouter(prefix="/api", tags=["rankings"])
 
-STANDINGS_TTL = 300  # 5 minutes
-
-
-def _compute_standings(db: Session, sport: str) -> list[dict]:
-    teams = db.query(Team).filter_by(sport=sport.upper()).all()
-    records: dict[int, dict] = {}
-
-    for t in teams:
-        records[t.id] = {
-            "team_id": t.id,
-            "name": t.name,
-            "abbreviation": t.abbreviation,
-            "conference": t.conference,
-            "division": t.division,
-            "wins": 0,
-            "losses": 0,
-            "win_pct": 0.0,
-        }
-
-    games = db.query(Game).filter(Game.sport == sport.upper(), Game.status == "final").all()
-    for g in games:
-        if g.home_score is None or g.away_score is None:
-            continue
-        if g.home_score > g.away_score:
-            if g.home_team_id in records:
-                records[g.home_team_id]["wins"] += 1
-            if g.away_team_id in records:
-                records[g.away_team_id]["losses"] += 1
-        else:
-            if g.away_team_id in records:
-                records[g.away_team_id]["wins"] += 1
-            if g.home_team_id in records:
-                records[g.home_team_id]["losses"] += 1
-
-    for r in records.values():
-        total = r["wins"] + r["losses"]
-        r["win_pct"] = round(r["wins"] / total, 3) if total > 0 else 0.0
-
-    return sorted(records.values(), key=lambda x: (-x["wins"], -x["win_pct"]))
+STANDINGS_TTL = 300
 
 
 @router.get("/rankings")
-def get_rankings(sport: Optional[str] = Query(None), db: Session = Depends(get_db)):
+def get_rankings(sport: Optional[str] = Query(None)):
     sports = [sport.upper()] if sport else ["NBA", "NFL"]
     result = {}
-
-    for s in sports:
-        cache_key = f"rankings:{s}"
+    for sport_key in sports:
+        cache_key = f"rankings:espn:{sport_key}"
         cached = cache_get(cache_key)
         if cached:
-            result[s] = cached
+            result[sport_key] = cached
             continue
 
-        standings = _compute_standings(db, s)
-        cache_set(cache_key, standings, ttl=STANDINGS_TTL)
-        result[s] = standings
+        teams = {team["abbreviation"]: {**team, "wins": 0, "losses": 0} for team in fetch_espn_teams(sport_key)}
+        for game in fetch_espn_games(sport_key, limit=100, seasons=1):
+            if game.get("status") != "final":
+                continue
+            home = game.get("home_team", {}).get("abbreviation")
+            away = game.get("away_team", {}).get("abbreviation")
+            home_score = game.get("home_score")
+            away_score = game.get("away_score")
+            if home not in teams or away not in teams or home_score is None or away_score is None:
+                continue
+            winner, loser = (home, away) if home_score > away_score else (away, home)
+            teams[winner]["wins"] += 1
+            teams[loser]["losses"] += 1
 
+        standings = []
+        for team in teams.values():
+            total = team["wins"] + team["losses"]
+            standings.append({
+                "team_id": team["id"],
+                "name": team["name"],
+                "abbreviation": team["abbreviation"],
+                "conference": team.get("conference") or "",
+                "division": team.get("division") or "",
+                "wins": team["wins"],
+                "losses": team["losses"],
+                "win_pct": round(team["wins"] / total, 3) if total else 0,
+            })
+        standings = sorted(standings, key=lambda row: (-row["wins"], row["name"]))
+        cache_set(cache_key, standings, ttl=STANDINGS_TTL)
+        result[sport_key] = standings
     return result
 
 
-def _serialize_team_row(team: Team) -> dict:
-    return {
-        "id": team.id,
-        "name": team.name,
-        "abbreviation": team.abbreviation,
-        "sport": team.sport,
-        "conference": team.conference,
-        "division": team.division,
-    }
-
-
-def _seed_espn_teams(sports: list[str]) -> None:
-    from db.session import get_session_factory
-
-    db = get_session_factory()()
-    try:
-        for sport_key in sports:
-            for team_data in fetch_espn_teams(sport_key):
-                existing = (
-                    db.query(Team)
-                    .filter(Team.sport == sport_key, Team.abbreviation == team_data["abbreviation"])
-                    .first()
-                )
-                if not existing:
-                    db.add(Team(
-                        name=team_data["name"],
-                        abbreviation=team_data["abbreviation"],
-                        sport=sport_key,
-                        conference=team_data["conference"],
-                        division=team_data["division"],
-                    ))
-        db.commit()
-    except Exception:
-        db.rollback()
-    finally:
-        db.close()
-
-
 @router.get("/teams")
-def get_teams(
-    background_tasks: BackgroundTasks,
-    sport: Optional[str] = Query(None),
-    db: Session = Depends(get_db),
-):
-    sports_to_seed = [sport.upper()] if sport else ["NBA", "NFL"]
-    espn_teams = []
-    for sport_key in sports_to_seed:
-        espn_teams.extend(fetch_espn_teams(sport_key))
-
-    if espn_teams:
-        background_tasks.add_task(_seed_espn_teams, sports_to_seed)
-        return [
-            {
-                "id": team["id"],
-                "name": team["name"],
-                "abbreviation": team["abbreviation"],
-                "sport": team["sport"],
-                "conference": team["conference"],
-                "division": team["division"],
-            }
-            for team in espn_teams
-        ]
-
-    q = db.query(Team)
-    if sport:
-        q = q.filter(Team.sport == sport.upper())
-    teams = q.order_by(Team.sport, Team.name).all()
-    return [_serialize_team_row(team) for team in teams]
+def get_teams(sport: Optional[str] = Query(None)):
+    sports = [sport.upper()] if sport else ["NBA", "NFL"]
+    teams = []
+    for sport_key in sports:
+        teams.extend(fetch_espn_teams(sport_key))
+    return teams
 
 
 @router.get("/players/{player_id}")
-def get_player(player_id: int, db: Session = Depends(get_db)):
-    from db.models import Player, Play
-    player = db.query(Player).get(player_id)
-    if not player:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="Player not found")
+def get_player(player_id: int):
+    from fastapi import HTTPException
 
-    play_counts = {}
-    plays = db.query(Play).filter_by(player_id=player_id).all()
-    for p in plays:
-        play_counts[p.play_type] = play_counts.get(p.play_type, 0) + 1
-
-    return {
-        "id": player.id,
-        "name": player.name,
-        "position": player.position,
-        "jersey_number": player.jersey_number,
-        "team": {"id": player.team_id, "name": player.team.name if player.team else None},
-        "play_stats": play_counts,
-        "total_plays": len(plays),
-    }
+    raise HTTPException(status_code=404, detail=f"Player {player_id} is not available from the ESPN team feed")

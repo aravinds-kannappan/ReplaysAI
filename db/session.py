@@ -1,6 +1,7 @@
+import os
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
-from config import get_settings
 
 _engine = None
 _SessionLocal = None
@@ -9,9 +10,11 @@ _SessionLocal = None
 def get_engine():
     global _engine
     if _engine is None:
-        settings = get_settings()
+        database_url = os.environ.get("INGESTION_DATABASE_URL")
+        if not database_url:
+            raise RuntimeError("INGESTION_DATABASE_URL is required only for ingestion scripts or optional DB-backed jobs.")
         _engine = create_engine(
-            settings.database_url,
+            database_url,
             pool_size=10,
             max_overflow=20,
             pool_pre_ping=True,

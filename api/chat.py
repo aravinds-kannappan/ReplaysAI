@@ -5,8 +5,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from config import get_settings
-from db.models import User
-from middleware.clerk_auth import get_current_user
+from middleware.clerk_auth import AuthUser, get_current_user
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
@@ -14,6 +13,7 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 class ChatBody(BaseModel):
     message: str
     context: str | None = None
+    favorite_teams: list[str] = Field(default_factory=list)
     messages: list["ChatMessage"] = Field(default_factory=list)
 
 
@@ -25,17 +25,11 @@ class ChatMessage(BaseModel):
 ChatBody.model_rebuild()
 
 
-def _user_context(user: User) -> str:
-    teams = [
-        f"{favorite.team.abbreviation or favorite.team.name} ({favorite.team.sport})"
-        for favorite in user.favorite_teams
-        if favorite.team
-    ]
-    players = [
-        favorite.player.name
-        for favorite in user.followed_players
-        if favorite.player
-    ]
+def _user_context(user: AuthUser, body: ChatBody) -> str:
+    teams = body.favorite_teams[:12]
+    players = []
+    if body.context:
+        teams.append(f"route context: {body.context}")
     return (
         f"User: {user.display_name or user.username or 'fan'}\n"
         f"Favorite teams: {', '.join(teams) if teams else 'none selected'}\n"
@@ -54,16 +48,15 @@ def _conversation(body: ChatBody) -> list[dict[str, str]]:
     return messages
 
 
-def _local_reply(body: ChatBody, user: User) -> str:
+def _local_reply(body: ChatBody, user: AuthUser) -> str:
     text = body.message.lower()
     context = body.context or "the current page"
-    favorites = [favorite.team.abbreviation for favorite in user.favorite_teams if favorite.team]
-    team_hint = f" around {', '.join(favorites[:3])}" if favorites else ""
+    team_hint = ""
 
     if any(word in text for word in ["recap", "summary", "explain"]):
         return (
             f"I can explain this from {context}{team_hint}. Open a game card and use Recap or Plays; "
-            "if the database has no rows yet, the app now pulls ESPN scoreboard and summary data so the answer is based on the selected matchup."
+            "the app pulls ESPN scoreboard and summary data so the answer is based on the selected matchup."
         )
     if any(word in text for word in ["reel", "video", "highlight", "clip"]):
         return (
@@ -84,7 +77,7 @@ def _local_reply(body: ChatBody, user: User) -> str:
 
 
 @router.post("")
-def chat(body: ChatBody, user: User = Depends(get_current_user)):
+def chat(body: ChatBody, user: AuthUser = Depends(get_current_user)):
     settings = get_settings()
     system = (
         "You are ReplaysAI's in-app sports assistant. Help the user understand games, "
@@ -92,7 +85,7 @@ def chat(body: ChatBody, user: User = Depends(get_current_user)):
         "Use the supplied app context and conversation history. Be conversational, concise, "
         "specific, and action-oriented."
     )
-    app_context = f"{_user_context(user)}\nCurrent route/context: {body.context or 'none'}"
+    app_context = f"{_user_context(user, body)}\nCurrent route/context: {body.context or 'none'}"
     conversation = _conversation(body)
 
     if settings.openai_api_key:

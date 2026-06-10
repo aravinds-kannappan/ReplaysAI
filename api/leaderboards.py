@@ -1,62 +1,35 @@
 """
 Leaderboard endpoints.
+Without database storage, leaderboard history is not persisted server-side.
 """
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
 
-from db.models import User, UserPoints, UserStreak
-from db.session import get_db
-from middleware.clerk_auth import get_current_user
+from middleware.clerk_auth import AuthUser, get_current_user
 
 router = APIRouter(prefix="/api", tags=["leaderboard"])
 
 
-def _serialize_entry(rank: int, user: User) -> dict:
-    pts = user.points
-    streak = user.streaks
-    return {
-        "rank": rank,
-        "user_id": user.id,
-        "username": user.username or f"fan_{user.id}",
-        "display_name": user.display_name or user.username or f"Fan #{user.id}",
-        "avatar_url": user.avatar_url,
-        "total_points": pts.total_points if pts else 0,
-        "correct_predictions": streak.correct_predictions if streak else 0,
-        "total_predictions": streak.total_predictions if streak else 0,
-        "accuracy": (
-            round(streak.correct_predictions / streak.total_predictions * 100, 1)
-            if streak and streak.total_predictions > 0 else 0
-        ),
-        "login_streak": streak.login_streak if streak else 0,
-        "badges": [{"slug": ub.badge.slug, "icon": ub.badge.icon} for ub in user.badges],
-    }
-
-
 @router.get("/leaderboard")
-def get_leaderboard(limit: int = 50, db: Session = Depends(get_db)):
-    users = (
-        db.query(User)
-        .join(UserPoints, User.id == UserPoints.user_id, isouter=True)
-        .order_by(UserPoints.total_points.desc().nulls_last())
-        .limit(limit)
-        .all()
-    )
-    return [_serialize_entry(i + 1, u) for i, u in enumerate(users)]
+def get_leaderboard(_limit: int = 50):
+    return []
 
 
 @router.get("/leaderboard/me")
-def get_my_rank(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    all_users = (
-        db.query(User)
-        .join(UserPoints, User.id == UserPoints.user_id, isouter=True)
-        .order_by(UserPoints.total_points.desc().nulls_last())
-        .all()
-    )
-    my_rank = next((i + 1 for i, u in enumerate(all_users) if u.id == user.id), len(all_users))
-    start = max(0, my_rank - 3)
-    neighbors = all_users[start: my_rank + 2]
+def get_my_rank(user: AuthUser = Depends(get_current_user)):
     return {
-        "my_rank": my_rank,
-        "total_users": len(all_users),
-        "neighbors": [_serialize_entry(start + i + 1, u) for i, u in enumerate(neighbors)],
+        "my_rank": 1,
+        "total_users": 1,
+        "neighbors": [{
+            "rank": 1,
+            "user_id": user.id,
+            "username": user.username or "you",
+            "display_name": user.display_name or user.username or "You",
+            "avatar_url": user.avatar_url,
+            "total_points": 0,
+            "correct_predictions": 0,
+            "total_predictions": 0,
+            "accuracy": 0,
+            "login_streak": 0,
+            "badges": [],
+        }],
     }

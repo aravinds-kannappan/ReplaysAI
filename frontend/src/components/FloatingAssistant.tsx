@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { SignedIn, useAuth } from "@clerk/clerk-react";
 import axios from "axios";
 import { apiPath } from "../lib/api";
+import { getLocalFavoriteTeams } from "../hooks/useUser";
 
 type Message = { role: "assistant" | "user"; text: string };
 
@@ -29,6 +30,7 @@ export default function FloatingAssistant() {
         {
           message: text,
           context: `${window.location.pathname}${window.location.search}`,
+          favorite_teams: getLocalFavoriteTeams().map((team) => `${team.sport}:${team.abbreviation}`),
           messages: nextMessages,
         },
         { headers: token ? { Authorization: `Bearer ${token}` } : {} },

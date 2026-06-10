@@ -12,17 +12,6 @@ from api.rankings import router as rankings_router
 from api.recaps import router as recaps_router
 from api.reels import router as reels_router
 from config import get_settings
-from db.models import Badge, Base
-from db.session import get_engine, get_session_factory
-
-BADGE_SEEDS = [
-    {"slug": "week1", "name": "First Pick", "description": "Made your first prediction", "icon": "*", "threshold": 1},
-    {"slug": "oracle", "name": "Oracle", "description": "10 correct predictions", "icon": "*", "threshold": 10},
-    {"slug": "loyal", "name": "Loyal Fan", "description": "7-day login streak", "icon": "*", "threshold": 7},
-    {"slug": "superfan", "name": "Superfan", "description": "30-day login streak", "icon": "*", "threshold": 30},
-    {"slug": "analyst", "name": "Analyst", "description": "Generated 10 recaps", "icon": "*", "threshold": 10},
-    {"slug": "clutch", "name": "Clutch", "description": "Predicted a game within 5 pts", "icon": "*", "threshold": 1},
-]
 
 
 def create_app() -> FastAPI:
@@ -48,21 +37,9 @@ def create_app() -> FastAPI:
     app.include_router(fantasy_router)
     app.include_router(leaderboard_router)
 
-    @app.on_event("startup")
-    def startup():
-        Base.metadata.create_all(bind=get_engine())
-        db = get_session_factory()()
-        try:
-            for seed in BADGE_SEEDS:
-                if not db.query(Badge).filter_by(slug=seed["slug"]).first():
-                    db.add(Badge(**seed))
-            db.commit()
-        finally:
-            db.close()
-
     @app.get("/health")
     def health():
-        return {"status": "ok", "version": "2.0.0"}
+        return {"status": "ok", "version": "2.0.0", "storage": "espn_public"}
 
     return app
 

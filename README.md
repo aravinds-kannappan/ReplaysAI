@@ -16,10 +16,10 @@ Replays AI closes this gap by ingesting structured play-by-play data, aligning i
 
 | Layer | Technology |
 |-------|-----------|
-| Backend | Python 3.10+, FastAPI, SQLAlchemy 2.0, asyncio |
-| Database | PostgreSQL 16 |
-| Cache | Redis 7 |
-| AI | Anthropic Claude Sonnet 4.6 (text + vision) |
+| Backend | Python 3.10+, FastAPI, asyncio |
+| Optional ingestion storage | PostgreSQL 16 for offline backfills only |
+| Cache | Redis 7 optional |
+| AI | OpenAI or Anthropic for chatbot/recap text |
 | Sports Data | ESPN unofficial API (NBA + NFL, no key required) |
 | Video | YouTube Data API v3, yt-dlp, OpenCV |
 | Auth | Clerk (JWT, React SDK) |
@@ -34,14 +34,13 @@ Required for production:
 | Service | Env var | Why |
 |---------|---------|-----|
 | Clerk | `VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` | Sign in, protected routes, user profiles, team survey |
-| Database | `DATABASE_URL` | Persist users, favorite teams, games, predictions, rosters, recaps |
-| Anthropic | `ANTHROPIC_API_KEY` | Dynamic chatbot replies, recap generation, fan-perspective writing, agent narration |
+| AI | `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` | Dynamic chatbot replies and generated analysis |
 
 Recommended:
 
 | Service | Env var | Why |
 |---------|---------|-----|
-| Redis | `REDIS_URL` | Cache standings, recaps, fan recaps, and repeated agent outputs |
+| Redis | `REDIS_URL` | Cache ESPN-derived standings, recaps, and repeated agent outputs |
 | YouTube Data API | `YOUTUBE_API_KEY` | Better highlight/video discovery for reels |
 
 Not required:
@@ -51,6 +50,7 @@ Not required:
 | ESPN public data | No | NBA/NFL teams, athletes, scoreboards, summaries, and play labels use public ESPN endpoints with sport/league slugs. |
 
 If `ANTHROPIC_API_KEY` is not set, `/api/chat` returns a setup message instead of pretending to be intelligent.
+`OPENAI_API_KEY` is also supported and is checked first.
 
 ---
 
@@ -64,7 +64,7 @@ Three agents run in parallel via `asyncio.gather()`. The most expensive steps �
 ESPN API
     |
     v
-PostgreSQL  <--  games, teams, plays (millions of rows)
+FastAPI routes  <--  ESPN teams, games, plays, athletes
     |
     |-- Agent 1: Event Extraction (pure Python, no LLM)
     |   Scoring runs, lead changes, clutch moments, top performers
@@ -83,7 +83,9 @@ Agent 4: Fan Perspective (on-demand, cached)
     Win -> celebratory tone. Loss -> honest post-mortem.
 ```
 
-### Database (17 tables)
+### Optional Database Models
+
+The API no longer needs a database for Vercel. The `db/` models remain for optional offline ingestion/backfill work only.
 
 Sports core: `teams`, `players`, `games`, `plays`
 
@@ -114,18 +116,18 @@ Generated from real ESPN play-by-play via 3 parallel agents. Task-split structur
 "My Team's View" tab on any game your team played. Claude rewrites the recap for your team's fans. Tone adapts dynamically: wins get energy, losses get honest analysis. Cached permanently per user per game.
 
 ### Predictions
-Pick game winners before tipoff with an optional spread prediction. Auto-scored when ingestion detects a game went final. 100 pts for correct winner, 150 pts for correct with spread within 5.
+Pick game winners before tipoff with an optional spread prediction. Picks are stored immediately in browser state when running without a database.
 
 ### Leaderboard
-Global ranking by total points. Shows prediction accuracy, current login streak, and badges earned. Your rank widget appears if you're outside the top 50.
+The leaderboard endpoints stay available, but global scoring requires adding a durable store later. Without a database, user picks and rosters are local to the browser.
 
 ### Weekly Roster Builder
-Pick up to 8 players per week (NBA or NFL). Players are materialized from box score ingestion and sorted by impact score from play-by-play or player stat rows. Roster locks at week start.
+Pick up to 8 players per week (NBA or NFL). Player pools come from ESPN public athlete leaderboards and saved rosters are local when no database is configured.
 
 ### Personalization Data Loading
-`/api/teams` self-seeds NBA and NFL team rows from ESPN when the database is empty. `/api/users/me/teams` can create a missing team from ESPN when it is selected. `/api/rosters/players` repairs older box-score-only ingestions by creating missing `players` records and links them to `player_game_stats`; when no local player rows exist it reads real ESPN public athlete leaderboards.
+`/api/teams` reads NBA and NFL team rows directly from ESPN public endpoints. `/api/rosters/players` reads real ESPN public athlete leaderboards.
 
-Team selection is optional from the dashboard instead of a forced post-login gate. The onboarding route renders ESPN/database teams only; if ESPN is unavailable, it shows an empty source state rather than fake teams. Users can edit teams later from the command center or onboarding route; if no teams are selected, all tabs remain accessible.
+Team selection is optional from the dashboard instead of a forced post-login gate. The onboarding route renders ESPN teams only; if ESPN is unavailable, it shows an empty source state rather than fake teams. Users can edit teams later from the command center or onboarding route; if no teams are selected, all tabs remain accessible.
 
 ### ESPN Public API Keys
 ESPN's public endpoints do not require API keys. The relevant sport/league slugs are:
@@ -135,7 +137,7 @@ ESPN's public endpoints do not require API keys. The relevant sport/league slugs
 | NBA | `basketball` | `nba` |
 | NFL | `football` | `nfl` |
 
-Fallback endpoints used by the app:
+Public endpoints used by the app:
 
 ```text
 NBA teams:    https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams
@@ -231,9 +233,8 @@ ReplaysAI/
 
 - Python 3.10+
 - Node.js 18+
-- PostgreSQL 16
-- Redis 7
-- Anthropic API key (for AI recap and CV generation)
+- Redis 7 optional
+- OpenAI or Anthropic API key optional for LLM replies
 - Clerk account (for authentication)
 
 ### 1. Clone
@@ -243,14 +244,14 @@ git clone https://github.com/aravinds-kannappan/ReplaysAI.git
 cd ReplaysAI
 ```
 
-### 2. Set up PostgreSQL and Redis
+### 2. Optional Redis
+
+The Vercel app runs without PostgreSQL. Redis is optional for cache speed.
 
 macOS via Homebrew:
 ```bash
-brew install postgresql@16 redis
-brew services start postgresql@16
+brew install redis
 brew services start redis
-createdb replaysai
 ```
 
 Docker:
@@ -321,11 +322,10 @@ through `api/index.py`.
 Set these environment variables in Vercel before deploying:
 
 Backend:
-- `DATABASE_URL` — hosted PostgreSQL connection string. Vercel cannot use the
-  local `localhost` Postgres default.
-- `REDIS_URL` — hosted Redis connection string.
 - `CLERK_SECRET_KEY` — Clerk backend secret for JWT verification.
-- `ANTHROPIC_API_KEY` — required for recap/CV/fan-perspective generation.
+- `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` — optional, but required for true LLM chatbot responses.
+- `OPENAI_MODEL` or `ANTHROPIC_MODEL` — optional model overrides.
+- `REDIS_URL` — optional hosted Redis connection string.
 - `YOUTUBE_API_KEY` — optional but recommended for highlight video discovery.
 - `ALLOWED_ORIGINS` — comma-separated frontend origins, for example
   `https://your-app.vercel.app,http://localhost:5173`.
@@ -335,16 +335,11 @@ Frontend:
 - `VITE_API_BASE_URL` — leave empty when using the same Vercel deployment for
   frontend and backend. Set this only if the API is deployed on another host.
 
-The sports data is real ESPN data, but the app will show empty lists until the
-database has been seeded. Run the backfill against your hosted database:
-
-```bash
-DATABASE_URL="postgresql://..." REDIS_URL="redis://..." python -m ingestion.seed_data --sport nba --seasons 1
-```
-
-Then run `python -m ingestion.scheduler` from a long-running worker environment
-for live refreshes. Vercel serverless functions are not a good place for the
-continuous scheduler loop.
+The deployed app does not require a database URL. NBA/NFL teams, schedules,
+plays, recaps, roster players, and reel cut manifests are derived from real ESPN
+public endpoints at request time. If you later add durable global scoring or
+offline backfills, run those from a worker environment rather than Vercel
+serverless functions.
 
 ---
 
@@ -354,10 +349,12 @@ Backend (`.env`):
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `ANTHROPIC_API_KEY` | For AI features | Claude Sonnet API key |
 | `CLERK_SECRET_KEY` | For auth | Clerk backend secret |
-| `DATABASE_URL` | Yes | PostgreSQL connection string |
-| `REDIS_URL` | Yes | Redis connection string |
+| `OPENAI_API_KEY` | For AI features | OpenAI API key |
+| `OPENAI_MODEL` | Optional | Defaults to `gpt-4o-mini` |
+| `ANTHROPIC_API_KEY` | For AI features | Anthropic API key if OpenAI is not set |
+| `ANTHROPIC_MODEL` | Optional | Defaults to `claude-3-5-sonnet-latest` |
+| `REDIS_URL` | Optional | Redis connection string |
 | `YOUTUBE_API_KEY` | Optional | YouTube Data API v3 key |
 | `ALLOWED_ORIGINS` | Yes in production | Comma-separated allowed frontend origins |
 
@@ -419,7 +416,7 @@ GET    /api/leaderboard/me
 
 ### Historical backfill
 
-`seed_data.py` is the entry point for populating the database with historical data. It iterates every date across the requested seasons, upserts game metadata, then fetches play-by-play and box scores for completed games. The process is idempotent — safe to interrupt and re-run.
+`seed_data.py` is an optional entry point for populating a PostgreSQL database with historical data if you later decide to run durable offline backfills. The Vercel app does not require this. The script iterates every date across the requested seasons, upserts game metadata, then fetches play-by-play and box scores for completed games.
 
 ```bash
 python -m ingestion.seed_data --help
