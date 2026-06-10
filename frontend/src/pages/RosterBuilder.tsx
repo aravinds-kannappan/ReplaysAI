@@ -34,7 +34,7 @@ export default function RosterBuilder() {
         <div>
           <p className="dashboard-kicker">Fantasy arena</p>
           <h1>Build a roster, then run the matchup</h1>
-          <p>Draft players from live ESPN stat fallbacks, compare impact, and save the lineup for this week.</p>
+          <p>Draft players from live ESPN stat leaderboards, compare impact, and save the lineup for this week.</p>
         </div>
         <div className="league-switch">
           {(["NBA", "NFL"] as League[]).map((item) => (

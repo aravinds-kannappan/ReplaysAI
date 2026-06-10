@@ -128,12 +128,16 @@ class TeamBody(BaseModel):
 def add_favorite_team(body: TeamBody, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     team = db.query(Team).get(body.team_id)
     if not team:
-        sport = "NBA" if 1000 < body.team_id < 2000 else "NFL" if 2000 < body.team_id < 3000 else None
-        if sport:
+        for sport in ("NBA", "NFL"):
             team_data = next((t for t in fetch_espn_teams(sport) if t["id"] == body.team_id), None)
             if team_data:
+                team = (
+                    db.query(Team)
+                    .filter(Team.sport == sport, Team.abbreviation == team_data["abbreviation"])
+                    .first()
+                )
+            if team_data and not team:
                 team = Team(
-                    id=team_data["id"],
                     name=team_data["name"],
                     abbreviation=team_data["abbreviation"],
                     sport=team_data["sport"],
@@ -142,11 +146,13 @@ def add_favorite_team(body: TeamBody, user: User = Depends(get_current_user), db
                 )
                 db.add(team)
                 db.commit()
+            if team:
+                break
         if not team:
             raise HTTPException(status_code=404, detail="Team not found")
-    existing = db.query(UserFavoriteTeam).filter_by(user_id=user.id, team_id=body.team_id).first()
+    existing = db.query(UserFavoriteTeam).filter_by(user_id=user.id, team_id=team.id).first()
     if not existing:
-        db.add(UserFavoriteTeam(user_id=user.id, team_id=body.team_id))
+        db.add(UserFavoriteTeam(user_id=user.id, team_id=team.id))
         # Award first follow badge engagement
         if user.points:
             user.points.engagement_points += 5

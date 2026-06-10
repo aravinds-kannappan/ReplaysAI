@@ -11,8 +11,6 @@ from config import get_settings
 from db.models import FanRecap, Game, GameFeature, Recap, Team
 from db.session import get_session_factory
 
-MODEL = "claude-sonnet-4-6"
-
 
 async def fan_perspective_agent(game_id: int, user_id: int, favorite_team_id: int) -> str:
     SessionLocal = get_session_factory()
@@ -72,22 +70,30 @@ Write a 4-paragraph fan-perspective recap for a {fav_team.name} fan:
 3. Who stepped up (or didn't) for {fav_team.name}
 4. {'Celebration + what this means for the season' if won else 'Honest post-mortem + what to watch next game'}
 
-Keep it passionate, specific, and under 350 words."""
+        Keep it passionate, specific, and under 350 words."""
 
         settings = get_settings()
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+        if settings.anthropic_api_key:
+            client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
-        loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(
-            None,
-            lambda: client.messages.create(
-                model=MODEL,
-                max_tokens=500,
-                system=system,
-                messages=[{"role": "user", "content": prompt}],
-            ),
-        )
-        content = response.content[0].text.strip()
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: client.messages.create(
+                    model=settings.anthropic_model,
+                    max_tokens=500,
+                    system=system,
+                    messages=[{"role": "user", "content": prompt}],
+                ),
+            )
+            content = response.content[0].text.strip()
+        else:
+            content = (
+                f"From a {fav_team.name} fan perspective, this is a "
+                f"{'win' if won else 'loss'} framed by the {fav_score}-{opp_score} team score.\n\n"
+                f"{generic_text[:900]}\n\n"
+                f"Team lens: {top_performers_text or 'player impact will update as more play and box score data is available.'}"
+            )
 
         existing_entry = db.query(FanRecap).filter_by(user_id=user_id, game_id=game_id).first()
         if existing_entry:

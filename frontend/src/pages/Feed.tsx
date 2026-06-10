@@ -1,9 +1,12 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
+import { useAuth } from "@clerk/clerk-react";
+import axios from "axios";
 import { useFeed, useRosterPlayers, useUpcomingGames } from "../hooks/usePredictions";
 import { useCurrentUser } from "../hooks/useUser";
 import { useGames } from "../hooks/useGames";
 import ScoreCard from "../components/ScoreCard";
+import { apiPath } from "../lib/api";
 import type { Game } from "../types";
 
 type DashboardTab = "feed" | "live" | "chat" | "predictions" | "roster" | "agents";
@@ -105,7 +108,9 @@ function PersonalizationLoader({ teams }: { teams: { abbreviation: string; sport
 }
 
 function AssistantChat({ games, league }: { games: Game[]; league: League }) {
+  const { getToken } = useAuth();
   const [draft, setDraft] = useState("");
+  const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: "assistant",
@@ -113,25 +118,41 @@ function AssistantChat({ games, league }: { games: Game[]; league: League }) {
     },
   ]);
 
-  function respond(question: string) {
-    const featured = games[0];
-    const answer = featured
-      ? `${formatGameTitle(featured)} is the best ${league} starting point. It is marked ${featured.status}, with ${featured.away_score ?? 0}-${featured.home_score ?? 0} on the board. Next step: open the game card for the play timeline, recap, and fan-mode summary.`
-      : `I do not see ${league} games yet. Pick favorite teams in onboarding or run the historical backfill so I can ground answers in real game data.`;
-
-    setMessages((prev) => [
-      ...prev,
-      { role: "user", text: question },
-      { role: "assistant", text: answer },
-    ]);
-  }
-
-  function submit(e: FormEvent) {
+  async function submit(e: FormEvent) {
     e.preventDefault();
     const question = draft.trim();
     if (!question) return;
     setDraft("");
-    respond(question);
+    const nextMessages = [...messages, { role: "user" as const, text: question }];
+    setMessages(nextMessages);
+    setLoading(true);
+    try {
+      const token = await getToken();
+      const featured = games[0];
+      const res = await axios.post(
+        apiPath("/api/chat"),
+        {
+          message: question,
+          messages: nextMessages,
+          context: JSON.stringify({
+            route: "/feed",
+            league,
+            featured_game: featured ? {
+              id: featured.id,
+              title: formatGameTitle(featured),
+              status: featured.status,
+              score: `${featured.away_score ?? 0}-${featured.home_score ?? 0}`,
+            } : null,
+          }),
+        },
+        { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+      );
+      setMessages((prev) => [...prev, { role: "assistant", text: res.data.reply }]);
+    } catch {
+      setMessages((prev) => [...prev, { role: "assistant", text: "I could not reach the assistant service yet. Check the backend and AI provider environment." }]);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -149,7 +170,7 @@ function AssistantChat({ games, league }: { games: Game[]; league: League }) {
           onChange={(e) => setDraft(e.target.value)}
           placeholder="Ask what happened, what matters next, or who to roster..."
         />
-        <button type="submit">Send</button>
+        <button type="submit" disabled={loading}>{loading ? "..." : "Send"}</button>
       </form>
     </div>
   );
@@ -283,7 +304,7 @@ export default function Feed() {
               </div>
               {isLoading && <p className="loading-text">Loading games...</p>}
               {!isLoading && games.length === 0 && (
-                onboarded ? <PersonalizationLoader teams={favoriteTeams} /> : <p className="empty-state">No games loaded yet. You can still use every tab, then choose teams later from Edit teams.</p>
+                onboarded ? <PersonalizationLoader teams={favoriteTeams} /> : <p className="empty-state">No games returned yet. You can still use every tab, then choose teams later from Edit teams.</p>
               )}
               <div className="games-grid compact">
                 {games.slice(0, 6).map((game) => <ScoreCard key={game.id} game={game} />)}

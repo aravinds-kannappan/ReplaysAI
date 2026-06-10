@@ -8,6 +8,8 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from agents.fan_perspective import fan_perspective_agent
+from api.espn_public import fetch_espn_games
+from api.predictions import _materialize_public_game
 from cache.redis_client import cache_get, cache_set
 from db.models import FanRecap, Game, User, UserFavoriteTeam
 from db.session import get_db
@@ -21,6 +23,7 @@ _fan_recap_locks: dict[str, bool] = {}
 def _serialize_game(g: Game) -> dict:
     return {
         "id": g.id,
+        "external_id": g.external_id,
         "sport": g.sport,
         "status": g.status,
         "game_date": g.game_date.isoformat() if g.game_date else None,
@@ -56,10 +59,27 @@ def get_personalized_feed(
         )
 
     return {
-        "games": [_serialize_game(g) for g in games],
+        "games": _with_public_games([_serialize_game(g) for g in games], favorite_team_ids, limit),
         "favorite_team_ids": favorite_team_ids,
         "onboarded": bool(favorite_team_ids),
     }
+
+
+def _with_public_games(rows: list[dict], favorite_team_ids: list[int], limit: int) -> list[dict]:
+    if len(rows) >= limit:
+        return rows
+    seen = {row.get("external_id") for row in rows if row.get("external_id")}
+    for sport in ("NBA", "NFL"):
+        for game in fetch_espn_games(sport, limit=limit):
+            if favorite_team_ids and game["home_team"]["id"] not in favorite_team_ids and game["away_team"]["id"] not in favorite_team_ids:
+                continue
+            if game.get("external_id") in seen:
+                continue
+            rows.append(game)
+            seen.add(game.get("external_id"))
+            if len(rows) >= limit:
+                return rows
+    return rows
 
 
 @router.get("/games/{game_id}/fan-recap")
@@ -81,6 +101,8 @@ def get_fan_recap(game_id: int, user: User = Depends(get_current_user), db: Sess
 @router.post("/games/{game_id}/fan-recap/generate")
 async def generate_fan_recap(game_id: int, background_tasks: BackgroundTasks, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     game = db.query(Game).get(game_id)
+    if not game:
+        game = _materialize_public_game(db, game_id)
     if not game:
         raise HTTPException(status_code=404, detail="Game not found")
 

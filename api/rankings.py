@@ -80,7 +80,6 @@ def get_teams(sport: Optional[str] = Query(None), db: Session = Depends(get_db))
             for team_data in fetch_espn_teams(sport_key):
                 if not db.query(Team).filter_by(abbreviation=team_data["abbreviation"], sport=sport_key).first():
                     db.add(Team(
-                        id=team_data["id"],
                         name=team_data["name"],
                         abbreviation=team_data["abbreviation"],
                         sport=sport_key,
@@ -90,12 +89,6 @@ def get_teams(sport: Optional[str] = Query(None), db: Session = Depends(get_db))
             db.commit()
         except Exception:
             db.rollback()
-            if sport_key == "NBA":
-                from ingestion.nba_ingester import _upsert_nba_teams
-                _upsert_nba_teams(db)
-            elif sport_key == "NFL":
-                from ingestion.nfl_ingester import _upsert_nfl_teams
-                _upsert_nfl_teams(db)
 
     q = db.query(Team)
     if sport:

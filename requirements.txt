@@ -19,6 +19,7 @@ requests==2.32.3
 
 # AI
 anthropic==0.37.1
+openai==1.58.1
 
 # Video processing
 yt-dlp==2024.11.4

@@ -4,6 +4,9 @@ from functools import lru_cache
 
 class Settings(BaseSettings):
     anthropic_api_key: str = ""
+    anthropic_model: str = "claude-3-5-sonnet-latest"
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o-mini"
     youtube_api_key: str = ""
     database_url: str = "postgresql://postgres:postgres@localhost:5432/replaysai"
     redis_url: str = "redis://localhost:6379"

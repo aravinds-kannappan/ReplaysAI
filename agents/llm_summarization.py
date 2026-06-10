@@ -12,7 +12,6 @@ from config import get_settings
 from db.models import Game, Play, Recap
 from db.session import get_session_factory
 
-MODEL = "claude-sonnet-4-6"
 MAX_PLAYS_PER_TASK = 80
 
 
@@ -25,13 +24,13 @@ def _format_plays_for_prompt(plays: list[Play], start_period: int, end_period: i
     return "\n".join(lines) if lines else "No play data available."
 
 
-async def _run_task(client: anthropic.Anthropic, system: str, prompt: str) -> str:
+async def _run_task(client: anthropic.Anthropic, model: str, system: str, prompt: str) -> str:
     loop = asyncio.get_event_loop()
     try:
         response = await loop.run_in_executor(
             None,
             lambda: client.messages.create(
-                model=MODEL,
+                model=model,
                 max_tokens=600,
                 system=system,
                 messages=[{"role": "user", "content": prompt}],
@@ -114,15 +113,23 @@ async def llm_summarization_agent(game_id: int, features: Optional[dict] = None,
         )
 
         settings = get_settings()
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+        if settings.anthropic_api_key:
+            client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
-        print(f"[LLM] Running 4 parallel summarization tasks for game {game_id}...")
-        first_half, second_half, player_spotlight, key_play = await asyncio.gather(
-            _run_task(client, system, task1_prompt),
-            _run_task(client, system, task2_prompt),
-            _run_task(client, system, task3_prompt),
-            _run_task(client, system, task4_prompt),
-        )
+            print(f"[LLM] Running 4 parallel summarization tasks for game {game_id}...")
+            first_half, second_half, player_spotlight, key_play = await asyncio.gather(
+                _run_task(client, settings.anthropic_model, system, task1_prompt),
+                _run_task(client, settings.anthropic_model, system, task2_prompt),
+                _run_task(client, settings.anthropic_model, system, task3_prompt),
+                _run_task(client, settings.anthropic_model, system, task4_prompt),
+            )
+            model_version = settings.anthropic_model
+        else:
+            first_half = " ".join(p.description for p in plays if (p.period or 0) <= 2 and p.description)[:700] or "Early play-by-play has not been published yet."
+            second_half = " ".join(p.description for p in plays if (p.period or 0) >= 3 and p.description)[:700] or "Late-game play-by-play has not been published yet."
+            player_spotlight = top_performers_text or "Player impact will become clearer once box score and play data fill in."
+            key_play = key_moments_text or highlight_plays_text or "The defining moment will update as key plays are classified."
+            model_version = "local-template"
 
         winner = home_name if home_score > away_score else away_name
         loser = away_name if home_score > away_score else home_name
@@ -150,9 +157,9 @@ async def llm_summarization_agent(game_id: int, features: Optional[dict] = None,
         existing_recap = db.query(Recap).filter_by(game_id=game_id).first()
         if existing_recap:
             existing_recap.content = full_recap
-            existing_recap.model_version = MODEL
+            existing_recap.model_version = model_version
         else:
-            recap = Recap(game_id=game_id, content=full_recap, model_version=MODEL)
+            recap = Recap(game_id=game_id, content=full_recap, model_version=model_version)
             db.add(recap)
         db.commit()
 

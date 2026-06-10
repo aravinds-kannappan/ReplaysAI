@@ -19,13 +19,18 @@ export default function FloatingAssistant() {
     const text = draft.trim();
     if (!text) return;
     setDraft("");
-    setMessages((prev) => [...prev, { role: "user", text }]);
+    const nextMessages = [...messages, { role: "user" as const, text }];
+    setMessages(nextMessages);
     setLoading(true);
     try {
       const token = await getToken();
       const res = await axios.post(
         apiPath("/api/chat"),
-        { message: text, context: window.location.pathname },
+        {
+          message: text,
+          context: `${window.location.pathname}${window.location.search}`,
+          messages: nextMessages,
+        },
         { headers: token ? { Authorization: `Bearer ${token}` } : {} },
       );
       setMessages((prev) => [...prev, { role: "assistant", text: res.data.reply }]);

@@ -59,7 +59,7 @@ export default function Home() {
           <h2>Recent Games</h2>
           {gamesLoading && <p className="loading-text">Loading games…</p>}
           {!gamesLoading && (!gamesData?.games.length) && (
-            <p className="empty-state">No games loaded yet. Run the ingestion script to populate data.</p>
+            <p className="empty-state">No games returned yet. ReplaysAI is syncing ESPN public schedules and stored ingestions.</p>
           )}
           <div className="games-grid">
             {gamesData?.games.map((g) => <ScoreCard key={g.id} game={g} />)}

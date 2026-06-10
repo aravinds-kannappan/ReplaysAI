@@ -79,7 +79,7 @@ export default function Reels() {
           {(data?.games ?? []).map((game) => <ScoreCard key={game.id} game={game} />)}
         </div>
         {(!data?.games || data.games.length === 0) && (
-          <p className="empty-state">No {league} games loaded yet. The vision studio is ready once ingestion has games.</p>
+          <p className="empty-state">No {league} games returned yet. Stored ingestions and ESPN public schedules will appear here as soon as either source has games.</p>
         )}
       </section>
 

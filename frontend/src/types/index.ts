@@ -6,6 +6,7 @@ export interface TeamInfo {
 
 export interface Game {
   id: number;
+  external_id?: string;
   sport: string;
   status: string;
   game_date: string | null;

@@ -1,7 +1,8 @@
-"""Small ESPN public API helpers for resilient team/player fallbacks."""
+"""Small ESPN public API helpers for real ESPN team/player/game data."""
 from __future__ import annotations
 
 import json
+from datetime import date as date_cls, datetime, timedelta
 from typing import Optional
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -14,27 +15,18 @@ LEAGUE_KEYS = {
     "NFL": {"sport": "football", "league": "nfl"},
 }
 
-STATIC_TEAMS = {
-    "NBA": [
-        ("ATL", "Atlanta Hawks"), ("BOS", "Boston Celtics"), ("BKN", "Brooklyn Nets"), ("CHA", "Charlotte Hornets"),
-        ("CHI", "Chicago Bulls"), ("CLE", "Cleveland Cavaliers"), ("DAL", "Dallas Mavericks"), ("DEN", "Denver Nuggets"),
-        ("DET", "Detroit Pistons"), ("GSW", "Golden State Warriors"), ("HOU", "Houston Rockets"), ("IND", "Indiana Pacers"),
-        ("LAC", "LA Clippers"), ("LAL", "Los Angeles Lakers"), ("MEM", "Memphis Grizzlies"), ("MIA", "Miami Heat"),
-        ("MIL", "Milwaukee Bucks"), ("MIN", "Minnesota Timberwolves"), ("NOP", "New Orleans Pelicans"), ("NYK", "New York Knicks"),
-        ("OKC", "Oklahoma City Thunder"), ("ORL", "Orlando Magic"), ("PHI", "Philadelphia 76ers"), ("PHX", "Phoenix Suns"),
-        ("POR", "Portland Trail Blazers"), ("SAC", "Sacramento Kings"), ("SAS", "San Antonio Spurs"), ("TOR", "Toronto Raptors"),
-        ("UTA", "Utah Jazz"), ("WAS", "Washington Wizards"),
-    ],
-    "NFL": [
-        ("ARI", "Arizona Cardinals"), ("ATL", "Atlanta Falcons"), ("BAL", "Baltimore Ravens"), ("BUF", "Buffalo Bills"),
-        ("CAR", "Carolina Panthers"), ("CHI", "Chicago Bears"), ("CIN", "Cincinnati Bengals"), ("CLE", "Cleveland Browns"),
-        ("DAL", "Dallas Cowboys"), ("DEN", "Denver Broncos"), ("DET", "Detroit Lions"), ("GB", "Green Bay Packers"),
-        ("HOU", "Houston Texans"), ("IND", "Indianapolis Colts"), ("JAX", "Jacksonville Jaguars"), ("KC", "Kansas City Chiefs"),
-        ("LV", "Las Vegas Raiders"), ("LAC", "Los Angeles Chargers"), ("LAR", "Los Angeles Rams"), ("MIA", "Miami Dolphins"),
-        ("MIN", "Minnesota Vikings"), ("NE", "New England Patriots"), ("NO", "New Orleans Saints"), ("NYG", "New York Giants"),
-        ("NYJ", "New York Jets"), ("PHI", "Philadelphia Eagles"), ("PIT", "Pittsburgh Steelers"), ("SF", "San Francisco 49ers"),
-        ("SEA", "Seattle Seahawks"), ("TB", "Tampa Bay Buccaneers"), ("TEN", "Tennessee Titans"), ("WAS", "Washington Commanders"),
-    ],
+NBA_SEASON_WINDOWS = {
+    "2015-16": (date_cls(2015, 10, 27), date_cls(2016, 6, 19)),
+    "2016-17": (date_cls(2016, 10, 25), date_cls(2017, 6, 12)),
+    "2017-18": (date_cls(2017, 10, 17), date_cls(2018, 6, 8)),
+    "2018-19": (date_cls(2018, 10, 16), date_cls(2019, 6, 13)),
+    "2019-20": (date_cls(2019, 10, 22), date_cls(2020, 10, 11)),
+    "2020-21": (date_cls(2020, 12, 22), date_cls(2021, 7, 22)),
+    "2021-22": (date_cls(2021, 10, 19), date_cls(2022, 6, 16)),
+    "2022-23": (date_cls(2022, 10, 18), date_cls(2023, 6, 12)),
+    "2023-24": (date_cls(2023, 10, 24), date_cls(2024, 6, 17)),
+    "2024-25": (date_cls(2024, 10, 22), date_cls(2025, 6, 30)),
+    "2025-26": (date_cls(2025, 10, 21), date_cls(2026, 6, 30)),
 }
 
 
@@ -56,16 +48,15 @@ def fetch_espn_teams(sport: str) -> list[dict]:
         data = _get_json(f"{ESPN_SITE_BASE}/{keys['sport']}/{keys['league']}/teams")
         league = (data.get("sports") or [{}])[0].get("leagues", [{}])[0]
     except Exception:
-        return fallback_teams(sport_key)
+        return []
     teams = []
 
     for item in league.get("teams", []):
         team = item.get("team", {})
         if not team.get("id"):
             continue
-        synthetic_id = (1000 if sport_key == "NBA" else 2000) + int(team.get("id"))
         teams.append({
-            "id": synthetic_id,
+            "id": int(team.get("id")),
             "external_id": str(team.get("id")),
             "name": team.get("displayName") or team.get("name"),
             "abbreviation": team.get("abbreviation"),
@@ -75,26 +66,264 @@ def fetch_espn_teams(sport: str) -> list[dict]:
             "logo": (team.get("logos") or [{}])[0].get("href"),
             "color": team.get("color"),
         })
-    return teams or fallback_teams(sport_key)
+    return teams
 
 
-def fallback_teams(sport: str) -> list[dict]:
+def _parse_espn_datetime(raw: str | None) -> str | None:
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00")).isoformat()
+    except ValueError:
+        return raw
+
+
+def _status_from_event(event: dict) -> str:
+    status = ((event.get("status") or {}).get("type") or {})
+    name = (status.get("name") or status.get("state") or "").lower()
+    completed = bool(status.get("completed"))
+    if completed or "final" in name or name in {"post", "postponed"}:
+        return "final"
+    if name in {"in", "live", "inprogress"} or "in_progress" in name:
+        return "live"
+    return "scheduled"
+
+
+def _score_value(raw: object) -> int | None:
+    try:
+        if raw in (None, ""):
+            return None
+        return int(float(str(raw)))
+    except (TypeError, ValueError):
+        return None
+
+
+def _team_from_competitor(competitor: dict, sport: str) -> dict:
+    team = competitor.get("team") or {}
+    external_id = team.get("id") or competitor.get("id") or "0"
+    return {
+        "id": int(external_id),
+        "external_id": str(external_id),
+        "name": team.get("displayName") or team.get("shortDisplayName") or team.get("name"),
+        "abbreviation": team.get("abbreviation") or team.get("shortDisplayName"),
+        "sport": sport.upper(),
+    }
+
+
+def _event_to_game(event: dict, sport: str) -> dict | None:
+    competitions = event.get("competitions") or []
+    if not competitions:
+        return None
+    competitors = competitions[0].get("competitors") or []
+    home = next((c for c in competitors if c.get("homeAway") == "home"), None)
+    away = next((c for c in competitors if c.get("homeAway") == "away"), None)
+    if not home or not away:
+        return None
+
+    event_id = str(event.get("id") or "")
+    if not event_id:
+        return None
+
+    home_team = _team_from_competitor(home, sport)
+    away_team = _team_from_competitor(away, sport)
+    return {
+        "id": int(event_id),
+        "external_id": event_id,
+        "sport": sport.upper(),
+        "status": _status_from_event(event),
+        "game_date": _parse_espn_datetime(event.get("date")),
+        "home_team": {"id": home_team["id"], "name": home_team["name"], "abbreviation": home_team["abbreviation"]},
+        "away_team": {"id": away_team["id"], "name": away_team["name"], "abbreviation": away_team["abbreviation"]},
+        "home_score": _score_value(home.get("score")),
+        "away_score": _score_value(away.get("score")),
+        "video_url": None,
+    }
+
+
+def _nfl_season_windows(seasons: int) -> list[tuple[str, date_cls, date_cls]]:
+    today = date_cls.today()
+    start_year = today.year if today.month >= 8 else today.year - 1
+    windows = []
+    for year in range(start_year - seasons + 1, start_year + 1):
+        windows.append((str(year), date_cls(year, 9, 1), date_cls(year + 1, 2, 28)))
+    return windows
+
+
+def _season_windows(sport: str, seasons: int) -> list[tuple[str, date_cls, date_cls]]:
+    if sport.upper() == "NBA":
+        return [(label, start, end) for label, (start, end) in list(NBA_SEASON_WINDOWS.items())[-seasons:]]
+    return _nfl_season_windows(seasons)
+
+
+def _date_range(start: date_cls, end: date_cls) -> str:
+    return f"{start:%Y%m%d}-{end:%Y%m%d}"
+
+
+def fetch_espn_scoreboard(sport: str, date: str | None = None, limit: int = 20) -> list[dict]:
+    keys = get_league_keys(sport)
+    params = {"limit": min(max(limit, 1), 100)}
+    if date:
+        params["dates"] = date.replace("-", "") if len(date) == 10 else date
+    data = _get_json(f"{ESPN_SITE_BASE}/{keys['sport']}/{keys['league']}/scoreboard", params)
+    games = [_event_to_game(event, sport) for event in data.get("events", [])]
+    return [game for game in games if game][:limit]
+
+
+def fetch_espn_games(sport: str, date: str | None = None, limit: int = 20, seasons: int = 10) -> list[dict]:
+    """Return real ESPN games across the requested date or the last N seasons."""
     sport_key = sport.upper()
-    base = 1000 if sport_key == "NBA" else 2000
-    return [
-        {
-            "id": base + index + 1,
-            "external_id": str(index + 1),
-            "name": name,
-            "abbreviation": abbr,
-            "sport": sport_key,
-            "conference": "",
-            "division": "",
-            "logo": None,
-            "color": None,
-        }
-        for index, (abbr, name) in enumerate(STATIC_TEAMS.get(sport_key, []))
-    ]
+    if date:
+        try:
+            return fetch_espn_scoreboard(sport_key, date=date, limit=limit)
+        except Exception:
+            return []
+
+    seen: set[int] = set()
+    games: list[dict] = []
+    per_window = max(1, limit // max(1, seasons))
+    windows = list(reversed(_season_windows(sport_key, seasons)))
+    today = date_cls.today()
+    for _, start, end in windows:
+        end = min(end, today)
+        if end < start:
+            continue
+        end_slice_start = max(start, end - timedelta(days=60))
+        try:
+            window_games = fetch_espn_scoreboard(sport_key, date=_date_range(end_slice_start, end), limit=100)
+            if not window_games:
+                window_games = fetch_espn_scoreboard(sport_key, date=_date_range(start, end), limit=100)
+            for game in sorted(window_games, key=lambda g: g.get("game_date") or "", reverse=True)[:per_window]:
+                if game["id"] not in seen:
+                    seen.add(game["id"])
+                    games.append(game)
+                if len(games) >= limit:
+                    return games
+        except Exception:
+            continue
+    return games
+
+
+def fetch_espn_game_summary(sport: str, event_id: str | int) -> dict:
+    keys = get_league_keys(sport)
+    return _get_json(
+        f"{ESPN_SITE_BASE}/{keys['sport']}/{keys['league']}/summary",
+        {"event": str(event_id)},
+    )
+
+
+def fetch_espn_game(sport: str, event_id: str | int) -> dict | None:
+    summary = fetch_espn_game_summary(sport, event_id)
+    header = summary.get("header") or {}
+    competitions = header.get("competitions") or []
+    event = {
+        "id": str(event_id),
+        "date": competitions[0].get("date") if competitions else None,
+        "status": header.get("status"),
+        "competitions": competitions,
+    }
+    return _event_to_game(event, sport)
+
+
+def fetch_espn_game_by_id(event_id: str | int, sports: tuple[str, ...] = ("NBA", "NFL")) -> tuple[str, dict] | None:
+    for sport in sports:
+        try:
+            game = fetch_espn_game(sport, event_id)
+        except Exception:
+            game = None
+        if game:
+            return sport, game
+    return None
+
+
+def fetch_espn_summary_by_id(event_id: str | int, sports: tuple[str, ...] = ("NBA", "NFL")) -> tuple[str, dict] | None:
+    for sport in sports:
+        try:
+            summary = fetch_espn_game_summary(sport, event_id)
+        except Exception:
+            summary = None
+        if summary and summary.get("header"):
+            return sport, summary
+    return None
+
+
+def classify_play_description(description: str, sport: str) -> str:
+    text = description.lower()
+    if sport.upper() == "NFL":
+        if "touchdown" in text:
+            return "touchdown"
+        if "intercept" in text:
+            return "interception"
+        if "sack" in text:
+            return "sack"
+        if "field goal" in text:
+            return "field_goal"
+        if "fumble" in text:
+            return "turnover"
+        if "pass" in text:
+            return "pass"
+        if "rush" in text or "run" in text:
+            return "rush"
+        return "other"
+
+    if "dunk" in text:
+        return "dunk"
+    if "3pt" in text or "three point" in text or "three-pointer" in text:
+        return "three_pointer"
+    if "block" in text:
+        return "block"
+    if "steal" in text:
+        return "steal"
+    if "turnover" in text:
+        return "turnover"
+    if "free throw" in text:
+        return "free_throw"
+    if "assist" in text:
+        return "assist"
+    if "jump shot" in text or "layup" in text or "makes" in text:
+        return "shot"
+    return "other"
+
+
+def extract_summary_plays(summary: dict, sport: str, limit: int = 200) -> list[dict]:
+    raw_plays: list[dict] = []
+    raw_plays.extend(summary.get("plays") or [])
+    for drive in (summary.get("drives") or {}).get("previous", []):
+        raw_plays.extend(drive.get("plays") or [])
+
+    plays = []
+    for index, play in enumerate(raw_plays[:limit]):
+        description = str(play.get("text") or play.get("description") or "").strip()
+        if not description:
+            continue
+        period_data = play.get("period") or {}
+        clock_data = play.get("clock") or {}
+        plays.append({
+            "id": index + 1,
+            "period": period_data.get("number", 1) if isinstance(period_data, dict) else 1,
+            "clock": clock_data.get("displayValue", "") if isinstance(clock_data, dict) else "",
+            "play_type": classify_play_description(description, sport),
+            "description": description[:500],
+            "home_score": _score_value(play.get("homeScore")),
+            "away_score": _score_value(play.get("awayScore")),
+            "player": None,
+        })
+    return plays
+
+
+def extract_summary_highlights(summary: dict, sport: str) -> list[dict]:
+    highlight_types = {
+        "dunk", "three_pointer", "block", "steal", "touchdown",
+        "interception", "sack", "field_goal", "turnover",
+    }
+    highlights = []
+    for index, play in enumerate(extract_summary_plays(summary, sport, limit=200)):
+        if play["play_type"] in highlight_types:
+            highlights.append({
+                "timestamp": float(index * 35),
+                "play_type": play["play_type"],
+                "confidence": 0.72,
+            })
+    return highlights[:16]
 
 
 def fetch_espn_athletes(sport: str, limit: int = 80) -> list[dict]:
@@ -106,7 +335,7 @@ def fetch_espn_athletes(sport: str, limit: int = 80) -> list[dict]:
             {"limit": limit},
         )
     except Exception:
-        return fallback_athletes(sport_key, limit)
+        return []
     athletes = []
 
     for index, item in enumerate(data.get("athletes", [])):
@@ -128,33 +357,4 @@ def fetch_espn_athletes(sport: str, limit: int = 80) -> list[dict]:
             "impact_score": impact,
             "headshot": (athlete.get("headshot") or {}).get("href"),
         })
-    return athletes or fallback_athletes(sport_key, limit)
-
-
-def fallback_athletes(sport: str, limit: int = 80) -> list[dict]:
-    names = {
-        "NBA": [
-            ("Nikola Jokic", "C", "DEN"), ("Shai Gilgeous-Alexander", "G", "OKC"), ("Luka Doncic", "G", "LAL"),
-            ("Giannis Antetokounmpo", "F", "MIL"), ("Jayson Tatum", "F", "BOS"), ("Anthony Edwards", "G", "MIN"),
-            ("Stephen Curry", "G", "GSW"), ("Jalen Brunson", "G", "NYK"), ("Kevin Durant", "F", "PHX"),
-            ("Victor Wembanyama", "C", "SAS"),
-        ],
-        "NFL": [
-            ("Patrick Mahomes", "QB", "KC"), ("Josh Allen", "QB", "BUF"), ("Lamar Jackson", "QB", "BAL"),
-            ("Justin Jefferson", "WR", "MIN"), ("Ja'Marr Chase", "WR", "CIN"), ("Christian McCaffrey", "RB", "SF"),
-            ("CeeDee Lamb", "WR", "DAL"), ("Micah Parsons", "EDGE", "DAL"), ("T.J. Watt", "EDGE", "PIT"),
-            ("Travis Kelce", "TE", "KC"),
-        ],
-    }.get(sport.upper(), [])
-    return [
-        {
-            "id": (3000 if sport.upper() == "NBA" else 4000) + index + 1,
-            "name": name,
-            "position": position,
-            "team": team,
-            "sport": sport.upper(),
-            "impact_score": round(96 - index * 3.1, 1),
-            "headshot": None,
-        }
-        for index, (name, position, team) in enumerate(names[:limit])
-    ]
+    return athletes

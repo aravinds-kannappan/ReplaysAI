@@ -48,7 +48,7 @@ Not required:
 
 | Service | Key needed? | Notes |
 |---------|-------------|-------|
-| ESPN public data | No | The NBA/NFL team/player fallbacks use public ESPN endpoints with sport/league slugs. |
+| ESPN public data | No | NBA/NFL teams, athletes, scoreboards, summaries, and play labels use public ESPN endpoints with sport/league slugs. |
 
 If `ANTHROPIC_API_KEY` is not set, `/api/chat` returns a setup message instead of pretending to be intelligent.
 
@@ -123,9 +123,9 @@ Global ranking by total points. Shows prediction accuracy, current login streak,
 Pick up to 8 players per week (NBA or NFL). Players are materialized from box score ingestion and sorted by impact score from play-by-play or player stat rows. Roster locks at week start.
 
 ### Personalization Data Loading
-`/api/teams` now self-seeds NBA and NFL team rows if the database is empty, returns ESPN/public fallback teams if persistence fails, and the onboarding UI also includes a local fallback list so users never see an empty team picker. `/api/users/me/teams` can create a missing fallback team when it is selected. `/api/rosters/players` repairs older box-score-only ingestions by creating missing `players` records and links them to `player_game_stats`; it also falls back to ESPN public athlete leaderboards when no player rows exist.
+`/api/teams` self-seeds NBA and NFL team rows from ESPN when the database is empty. `/api/users/me/teams` can create a missing team from ESPN when it is selected. `/api/rosters/players` repairs older box-score-only ingestions by creating missing `players` records and links them to `player_game_stats`; when no local player rows exist it reads real ESPN public athlete leaderboards.
 
-Team selection is now optional from the dashboard instead of a forced post-login gate. The onboarding route renders local NBA/NFL fallback teams immediately while ESPN syncs in the background, and it navigates back to the feed instantly while favorite-team writes complete asynchronously. Users can edit teams later from the command center or onboarding route; if no teams are selected, all tabs remain accessible.
+Team selection is optional from the dashboard instead of a forced post-login gate. The onboarding route renders ESPN/database teams only; if ESPN is unavailable, it shows an empty source state rather than fake teams. Users can edit teams later from the command center or onboarding route; if no teams are selected, all tabs remain accessible.
 
 ### ESPN Public API Keys
 ESPN's public endpoints do not require API keys. The relevant sport/league slugs are:

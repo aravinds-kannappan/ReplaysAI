@@ -24,6 +24,7 @@ BATCH_SIZE = 5
 
 async def _classify_frame_batch(
     client: anthropic.Anthropic,
+    model: str,
     frames: list[tuple[float, str]],
 ) -> list[dict]:
     """Send a batch of frames to Claude Vision and return classifications."""
@@ -50,7 +51,7 @@ async def _classify_frame_batch(
         response = await loop.run_in_executor(
             None,
             lambda: client.messages.create(
-                model="claude-sonnet-4-6",
+                model=model,
                 max_tokens=512,
                 messages=[{"role": "user", "content": content}],
             ),
@@ -105,12 +106,15 @@ async def cv_classification_agent(game_id: int) -> list[dict]:
 
         print(f"[CV] Got {len(frames)} frames, classifying in batches of {BATCH_SIZE}...")
         settings = get_settings()
+        if not settings.anthropic_api_key:
+            print(f"[CV] No ANTHROPIC_API_KEY configured, skipping vision inference")
+            return []
         client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
         classifications_to_save = []
         for batch_start in range(0, len(frames), BATCH_SIZE):
             batch = frames[batch_start: batch_start + BATCH_SIZE]
-            batch_results = await _classify_frame_batch(client, batch)
+            batch_results = await _classify_frame_batch(client, settings.anthropic_model, batch)
 
             for item in batch_results:
                 idx = item.get("index", 0)
