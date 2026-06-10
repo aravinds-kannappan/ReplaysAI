@@ -111,7 +111,10 @@ export default function Onboarding() {
         queryFn: () =>
           axios.get(apiPath("/api/feed"), { params: { favorite_teams: favoriteKeys } }).then((r) => r.data),
       });
-      const topGames = ((feed?.games ?? []) as { id: number }[]).slice(0, 3);
+      // Scheduled games have no highlight clips yet — warm finished/live ones.
+      const topGames = ((feed?.games ?? []) as { id: number; status: string }[])
+        .filter((game) => game.status !== "scheduled")
+        .slice(0, 3);
       await Promise.allSettled(
         topGames.map((game) =>
           queryClient.prefetchQuery({

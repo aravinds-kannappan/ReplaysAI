@@ -180,7 +180,15 @@ def _nfl_season_windows(seasons: int) -> list[tuple[str, date_cls, date_cls]]:
 
 def _season_windows(sport: str, seasons: int) -> list[tuple[str, date_cls, date_cls]]:
     if sport.upper() == "NBA":
-        return [(label, start, end) for label, (start, end) in list(NBA_SEASON_WINDOWS.items())[-seasons:]]
+        windows = dict(NBA_SEASON_WINDOWS)
+        # Keep the current season covered even after the hardcoded table ends,
+        # so the feed never goes stale at a season boundary.
+        today = date_cls.today()
+        start_year = today.year if today.month >= 9 else today.year - 1
+        label = f"{start_year}-{str(start_year + 1)[-2:]}"
+        if label not in windows:
+            windows[label] = (date_cls(start_year, 10, 1), date_cls(start_year + 1, 6, 30))
+        return [(label, start, end) for label, (start, end) in list(windows.items())[-seasons:]]
     return _nfl_season_windows(seasons)
 
 
@@ -190,7 +198,9 @@ def _date_range(start: date_cls, end: date_cls) -> str:
 
 def fetch_espn_scoreboard(sport: str, date: str | None = None, limit: int = 20) -> list[dict]:
     keys = get_league_keys(sport)
-    params = {"limit": min(max(limit, 1), 100)}
+    # ESPN honors limits well above 100; capping lower truncates multi-week
+    # date ranges mid-window and silently drops the newest games.
+    params = {"limit": min(max(limit, 1), 1000)}
     if date:
         params["dates"] = date.replace("-", "") if len(date) == 10 else date
     data = _get_json(f"{ESPN_SITE_BASE}/{keys['sport']}/{keys['league']}/scoreboard", params)
@@ -209,6 +219,17 @@ def fetch_espn_games(sport: str, date: str | None = None, limit: int = 20, seaso
 
     seen: set[int] = set()
     games: list[dict] = []
+
+    # Today's scoreboard first: live and just-scheduled games (e.g. tonight's
+    # Finals game) must always be present regardless of season-window slicing.
+    try:
+        for game in fetch_espn_scoreboard(sport_key, limit=50):
+            if game["id"] not in seen:
+                seen.add(game["id"])
+                games.append(game)
+    except Exception:
+        pass
+
     per_window = max(1, limit // max(1, seasons))
     today = date_cls.today()
     windows = []
@@ -221,9 +242,11 @@ def fetch_espn_games(sport: str, date: str | None = None, limit: int = 20, seaso
         start, end = window
         end_slice_start = max(start, end - timedelta(days=60))
         try:
-            window_games = fetch_espn_scoreboard(sport_key, date=_date_range(end_slice_start, end), limit=100)
+            # Full range limit: a 60-day slice can exceed 100 games, and ESPN
+            # returns events oldest-first, so a low limit drops the newest games.
+            window_games = fetch_espn_scoreboard(sport_key, date=_date_range(end_slice_start, end), limit=1000)
             if not window_games:
-                window_games = fetch_espn_scoreboard(sport_key, date=_date_range(start, end), limit=100)
+                window_games = fetch_espn_scoreboard(sport_key, date=_date_range(start, end), limit=1000)
             return window_games
         except Exception:
             return []
@@ -234,12 +257,17 @@ def fetch_espn_games(sport: str, date: str | None = None, limit: int = 20, seaso
         results = list(pool.map(_window_games, windows))
 
     for window_games in results:
-        for game in sorted(window_games, key=lambda g: g.get("game_date") or "", reverse=True)[:per_window]:
-            if game["id"] not in seen:
-                seen.add(game["id"])
-                games.append(game)
+        added = 0
+        for game in sorted(window_games, key=lambda g: g.get("game_date") or "", reverse=True):
+            if game["id"] in seen:
+                continue
+            seen.add(game["id"])
+            games.append(game)
+            added += 1
             if len(games) >= limit:
                 return games
+            if added >= per_window:
+                break
     return games
 
 
@@ -364,6 +392,33 @@ def extract_summary_highlights(summary: dict, sport: str) -> list[dict]:
                 "confidence": 0.72,
             })
     return highlights[:16]
+
+
+def extract_summary_videos(summary: dict) -> list[dict]:
+    """Real highlight video clips (MP4 on ESPN's CDN) attached to a game summary."""
+    clips = []
+    for video in summary.get("videos") or []:
+        links = video.get("links") or {}
+        source = links.get("source") or {}
+        # HLS first: ESPN's direct MP4 variants 500 on Akamai, while the HLS
+        # playlists stream publicly with permissive CORS.
+        href = (
+            (source.get("HLS") or {}).get("href")
+            or (source.get("HD") or {}).get("href")
+            or source.get("href")
+            or ((links.get("mobile") or {}).get("source") or {}).get("href")
+        )
+        if not href:
+            continue
+        clips.append({
+            "id": str(video.get("id") or len(clips) + 1),
+            "headline": video.get("headline") or "",
+            "description": video.get("description") or "",
+            "duration": int(video.get("duration") or 0),
+            "url": href,
+            "thumbnail": video.get("thumbnail") or "",
+        })
+    return clips
 
 
 def fetch_espn_athletes(sport: str, limit: int = 80) -> list[dict]:
