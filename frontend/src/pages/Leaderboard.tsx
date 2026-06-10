@@ -59,7 +59,7 @@ export default function Leaderboard() {
           <div className="panel-heading"><div><span>Rivals</span><h2>Near your rank</h2></div></div>
           <div className="rival-list">
             {rivals.map((entry: LeaderboardEntry) => (
-              <div key={entry.user_id} className={`rival-row ${entry.user_id === user?.id ? "me" : ""}`}>
+              <div key={entry.user_id} className={`rival-row ${String(entry.user_id) === String(user?.id ?? "") ? "me" : ""}`}>
                 <span>#{entry.rank}</span>
                 <strong>{entry.display_name}</strong>
                 <b>{entry.total_points.toLocaleString()}</b>

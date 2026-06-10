@@ -278,6 +278,13 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
 ### 4. Seed historical data
 
+Offline ingestion needs the heavier dependency set (PostgreSQL drivers, nba_api,
+yt-dlp, OpenCV) which is intentionally kept out of the serverless install:
+
+```bash
+pip install -r requirements-ingestion.txt
+```
+
 ```bash
 # Full backfill: all sports, last 10 seasons (long-running)
 python -m ingestion.seed_data
@@ -323,6 +330,9 @@ Set these environment variables in Vercel before deploying:
 
 Backend:
 - `CLERK_SECRET_KEY` — Clerk backend secret for JWT verification.
+- `CLERK_ISSUER` — only needed when your Clerk instance uses a custom domain
+  (e.g. `https://clerk.yourdomain.com`). Hosted `*.clerk.accounts.dev`
+  instances are detected automatically from the token.
 - `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` — optional, but required for true LLM chatbot responses.
 - `OPENAI_MODEL` or `ANTHROPIC_MODEL` — optional model overrides.
 - `REDIS_URL` — optional hosted Redis connection string.
@@ -340,6 +350,12 @@ plays, recaps, roster players, and reel cut manifests are derived from real ESPN
 public endpoints at request time. If you later add durable global scoring or
 offline backfills, run those from a worker environment rather than Vercel
 serverless functions.
+
+Only the root `requirements.txt` is installed on Vercel. It is deliberately
+slim — the offline ingestion/CV dependencies in `requirements-ingestion.txt`
+(OpenCV, yt-dlp, psycopg2, nba_api, SQLAlchemy) would push the Python function
+past Vercel's unzipped size limit and break every `/api/*` route with
+`FUNCTION_INVOCATION_FAILED`.
 
 ---
 

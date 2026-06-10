@@ -5,7 +5,7 @@
       "name": "frontend",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
-      "cwd": "/Users/aravindkannappan/Desktop/Projects/ReplaysAI/frontend",
+      "cwd": "/Users/aravindkannappan/Desktop/ReplaysAI/frontend",
       "port": 5173
     }
   ]

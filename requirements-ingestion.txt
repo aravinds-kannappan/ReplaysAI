@@ -1,0 +1,22 @@
+# Offline ingestion, backfill, and CV workers only.
+# Do NOT install these on Vercel — they push the serverless function past the
+# unzipped size limit. Run ingestion/seed_data.py and agents/cv_classification.py
+# from a worker environment with: pip install -r requirements-ingestion.txt
+-r requirements.txt
+
+# Database
+sqlalchemy==2.0.35
+psycopg2-binary==2.9.9
+alembic==1.13.3
+
+# Sports data
+nba_api==1.4.0
+requests==2.32.3
+
+# Video processing
+yt-dlp==2024.11.4
+opencv-python-headless==4.10.0.84
+
+# Utilities
+tenacity==9.0.0
+tqdm==4.66.4

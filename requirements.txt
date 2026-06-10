@@ -1,34 +1,27 @@
+# Serverless API (Vercel) and local backend dev.
+# Heavy offline ingestion/CV dependencies live in requirements-ingestion.txt —
+# keeping them out of this file keeps the Vercel Python function under the
+# unzipped size limit.
+
 # Web framework
 fastapi==0.115.0
-uvicorn[standard]==0.30.6
+uvicorn==0.30.6
 
-# Database
-sqlalchemy==2.0.35
-psycopg2-binary==2.9.9
-alembic==1.13.3
-
-# Cache
+# Cache (optional — endpoints degrade gracefully without REDIS_URL)
 redis==5.1.1
 
 # Auth
 PyJWT==2.10.1
 
-# Sports data
-nba_api==1.4.0
-requests==2.32.3
+# HTTP client (ESPN public API, YouTube search)
+httpx==0.27.2
+certifi>=2024.7.4
 
-# AI
+# AI assistant (lazily imported when API keys are configured)
 anthropic==0.37.1
 openai==1.58.1
-
-# Video processing
-yt-dlp==2024.11.4
-opencv-python-headless==4.10.0.84
 
 # Utilities
 python-dotenv==1.0.1
 pydantic==2.9.2
 pydantic-settings==2.5.2
-httpx==0.27.2
-tenacity==9.0.0
-tqdm==4.66.4

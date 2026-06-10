@@ -1523,3 +1523,9 @@ a { color: inherit; text-decoration: none; }
     grid-template-columns: 1fr;
   }
 }
+
+/* Reel game-source selection */
+.reel-source { display: flex; flex-direction: column; gap: 8px; }
+.reel-source.selected .score-card { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.reel-source > .btn-ghost { align-self: flex-start; }
+.reel-source.selected > .btn-ghost { border-color: var(--accent); color: var(--accent); }

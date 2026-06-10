@@ -1,12 +1,17 @@
 """
 Clerk JWT verification for FastAPI without a database dependency.
 """
+import ssl
 from dataclasses import dataclass
 from typing import Optional
+from urllib.parse import urlparse
 
+import certifi
 import jwt
 from fastapi import HTTPException, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+
+from config import get_settings
 
 security = HTTPBearer(auto_error=False)
 
@@ -24,19 +29,52 @@ class AuthUser:
     followed_players: list[dict] | None = None
 
 
+# Clerk's public JWKS lives on the instance's frontend-API domain
+# (https://<instance>.clerk.accounts.dev/.well-known/jwks.json) — the
+# api.clerk.com/v1/jwks endpoint requires a secret key and rejects PyJWKClient.
+_jwks_clients: dict[str, "jwt.PyJWKClient"] = {}
+
+
+def _trusted_issuer(token: str) -> str:
+    settings_issuer = get_settings().clerk_issuer.rstrip("/")
+    if settings_issuer:
+        return settings_issuer
+    payload = jwt.decode(token, options={"verify_signature": False})
+    issuer = str(payload.get("iss") or "").rstrip("/")
+    host = urlparse(issuer).hostname or ""
+    # Without a configured issuer, only Clerk-hosted domains are trusted —
+    # otherwise a forged iss claim could point verification at attacker keys.
+    if not issuer.startswith("https://") or not host.endswith(".clerk.accounts.dev"):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Untrusted token issuer; set CLERK_ISSUER for custom Clerk domains",
+        )
+    return issuer
+
+
 def _verify_clerk_token(token: str) -> dict:
     """Verify Clerk JWT and return payload. Raises HTTPException on failure."""
     try:
         from jwt import PyJWKClient
 
-        jwks_client = PyJWKClient("https://api.clerk.com/v1/jwks")
+        issuer = _trusted_issuer(token)
+        jwks_client = _jwks_clients.get(issuer)
+        if jwks_client is None:
+            jwks_client = PyJWKClient(
+                f"{issuer}/.well-known/jwks.json",
+                ssl_context=ssl.create_default_context(cafile=certifi.where()),
+            )
+            _jwks_clients[issuer] = jwks_client
         signing_key = jwks_client.get_signing_key_from_jwt(token)
         return jwt.decode(
             token,
             signing_key.key,
             algorithms=["RS256"],
+            issuer=issuer,
             options={"verify_aud": False},
         )
+    except HTTPException:
+        raise
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
     except Exception as exc:

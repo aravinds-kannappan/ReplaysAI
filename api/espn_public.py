@@ -1,11 +1,14 @@
 """Small ESPN public API helpers for real ESPN team/player/game data."""
 from __future__ import annotations
 
-import json
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date as date_cls, datetime, timedelta
 from typing import Optional
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+
+import httpx
 
 ESPN_SITE_BASE = "https://site.api.espn.com/apis/site/v2/sports"
 ESPN_WEB_BASE = "https://site.web.api.espn.com/apis/common/v3/sports"
@@ -30,11 +33,37 @@ NBA_SEASON_WINDOWS = {
 }
 
 
+# Warm serverless instances reuse this cache, so repeat dashboard loads avoid
+# re-hitting ESPN for every season window.
+_CACHE_TTL_SECONDS = 60.0
+_CACHE_MAX_ENTRIES = 256
+_cache: dict[str, tuple[float, dict]] = {}
+_cache_lock = threading.Lock()
+
+
 def _get_json(url: str, params: Optional[dict] = None) -> dict:
     full_url = f"{url}?{urlencode(params)}" if params else url
-    request = Request(full_url, headers={"User-Agent": "ReplaysAI/1.0"})
-    with urlopen(request, timeout=12) as response:
-        return json.loads(response.read().decode("utf-8"))
+    now = time.monotonic()
+    with _cache_lock:
+        hit = _cache.get(full_url)
+        if hit and now - hit[0] < _CACHE_TTL_SECONDS:
+            return hit[1]
+
+    response = httpx.get(
+        full_url,
+        headers={"User-Agent": "ReplaysAI/1.0"},
+        timeout=12,
+        follow_redirects=True,
+    )
+    response.raise_for_status()
+    data = response.json()
+
+    with _cache_lock:
+        if len(_cache) >= _CACHE_MAX_ENTRIES:
+            for stale_key, _ in sorted(_cache.items(), key=lambda item: item[1][0])[: _CACHE_MAX_ENTRIES // 4]:
+                _cache.pop(stale_key, None)
+        _cache[full_url] = (now, data)
+    return data
 
 
 def get_league_keys(sport: str) -> dict[str, str]:
@@ -181,25 +210,36 @@ def fetch_espn_games(sport: str, date: str | None = None, limit: int = 20, seaso
     seen: set[int] = set()
     games: list[dict] = []
     per_window = max(1, limit // max(1, seasons))
-    windows = list(reversed(_season_windows(sport_key, seasons)))
     today = date_cls.today()
-    for _, start, end in windows:
+    windows = []
+    for _, start, end in reversed(_season_windows(sport_key, seasons)):
         end = min(end, today)
-        if end < start:
-            continue
+        if end >= start:
+            windows.append((start, end))
+
+    def _window_games(window: tuple[date_cls, date_cls]) -> list[dict]:
+        start, end = window
         end_slice_start = max(start, end - timedelta(days=60))
         try:
             window_games = fetch_espn_scoreboard(sport_key, date=_date_range(end_slice_start, end), limit=100)
             if not window_games:
                 window_games = fetch_espn_scoreboard(sport_key, date=_date_range(start, end), limit=100)
-            for game in sorted(window_games, key=lambda g: g.get("game_date") or "", reverse=True)[:per_window]:
-                if game["id"] not in seen:
-                    seen.add(game["id"])
-                    games.append(game)
-                if len(games) >= limit:
-                    return games
+            return window_games
         except Exception:
-            continue
+            return []
+
+    if not windows:
+        return games
+    with ThreadPoolExecutor(max_workers=min(8, len(windows))) as pool:
+        results = list(pool.map(_window_games, windows))
+
+    for window_games in results:
+        for game in sorted(window_games, key=lambda g: g.get("game_date") or "", reverse=True)[:per_window]:
+            if game["id"] not in seen:
+                seen.add(game["id"])
+                games.append(game)
+            if len(games) >= limit:
+                return games
     return games
 
 

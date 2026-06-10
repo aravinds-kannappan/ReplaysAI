@@ -3,8 +3,11 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { useGames } from "../hooks/useGames";
+import { useFeed } from "../hooks/usePredictions";
+import { getLocalFavoriteTeams } from "../hooks/useUser";
 import ScoreCard from "../components/ScoreCard";
 import { apiPath } from "../lib/api";
+import type { Game } from "../types";
 
 type League = "NBA" | "NFL";
 
@@ -16,12 +19,25 @@ const CV_TAGS = {
 export default function Reels() {
   const [league, setLeague] = useState<League>("NBA");
   const [mode, setMode] = useState<"studio" | "cuts" | "explain">("studio");
+  const [selectedGameId, setSelectedGameId] = useState<number | null>(null);
   const { data } = useGames({ sport: league, limit: 8 });
-  const featuredGame = data?.games?.[0];
+  const { data: feed } = useFeed();
+
+  // Favorite-team games come first: the feed is already filtered to the teams
+  // picked in onboarding, so reels build around them by default.
+  const hasFavorites = getLocalFavoriteTeams().length > 0;
+  const favoriteGames = ((feed?.games ?? []) as Game[]).filter((game) => game.sport === league);
+  const leagueGames = data?.games ?? [];
+  const sourceGames = hasFavorites && favoriteGames.length > 0 ? favoriteGames : leagueGames;
+  const featuredGame = sourceGames.find((game) => game.id === selectedGameId) ?? sourceGames[0];
+
+  // Cut manifests are built as soon as a game is featured (often already
+  // prefetched by onboarding), not only after the cuts tab is opened.
   const { data: reelData, isLoading: reelsLoading } = useQuery({
     queryKey: ["reel-cuts", featuredGame?.id],
     queryFn: () => axios.get(apiPath(`/api/games/${featuredGame?.id}/reels`)).then((r) => r.data),
-    enabled: mode === "cuts" && !!featuredGame?.id,
+    enabled: !!featuredGame?.id,
+    staleTime: 300_000,
   });
   const searchUrl = `https://www.google.com/search?q=${league}+highlights+today`;
 
@@ -82,7 +98,11 @@ export default function Reels() {
           <div className="panel-heading">
             <div>
               <span>Generated reel cuts</span>
-              <h2>{featuredGame ? "2, 5, and 10 minute manifests" : "Choose a game source"}</h2>
+              <h2>
+                {featuredGame
+                  ? `${featuredGame.away_team.abbreviation} @ ${featuredGame.home_team.abbreviation} — 2, 5, and 10 minute manifests`
+                  : "Choose a game source"}
+              </h2>
             </div>
             {reelData?.video_url && <a href={reelData.video_url} target="_blank" rel="noreferrer">Open source</a>}
           </div>
@@ -106,13 +126,26 @@ export default function Reels() {
         <div className="panel-heading">
           <div>
             <span>Game source</span>
-            <h2>Attach reels to real games</h2>
+            <h2>{hasFavorites && favoriteGames.length > 0 ? "Your teams' games" : "Attach reels to real games"}</h2>
           </div>
         </div>
         <div className="games-grid compact">
-          {(data?.games ?? []).map((game) => <ScoreCard key={game.id} game={game} />)}
+          {sourceGames.map((game) => (
+            <div key={game.id} className={`reel-source${featuredGame?.id === game.id ? " selected" : ""}`}>
+              <ScoreCard game={game} />
+              <button
+                className="btn-ghost"
+                onClick={() => {
+                  setSelectedGameId(game.id);
+                  setMode("cuts");
+                }}
+              >
+                {featuredGame?.id === game.id ? "Cuts shown above" : "Build 2/5/10 cuts"}
+              </button>
+            </div>
+          ))}
         </div>
-        {(!data?.games || data.games.length === 0) && (
+        {sourceGames.length === 0 && (
           <p className="empty-state">No {league} games returned yet. Stored ingestions and ESPN public schedules will appear here as soon as either source has games.</p>
         )}
       </section>

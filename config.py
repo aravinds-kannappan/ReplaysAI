@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     youtube_api_key: str = ""
     redis_url: str = ""
     clerk_secret_key: str = ""
+    clerk_issuer: str = ""  # e.g. https://clerk.yourdomain.com for custom Clerk domains
     allowed_origins: str = "http://localhost:5173,http://localhost:3000"
 
     class Config:

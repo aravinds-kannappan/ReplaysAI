@@ -35,8 +35,13 @@ def get_personalized_feed(
 ):
     favorite_keys = _parse_favorite_keys(favorite_teams)
     rows = []
+    # When filtering by favorites, keep everything each season window returns
+    # (the scoreboard call fetches up to 100 games regardless), otherwise a
+    # per-window truncation leaves only finals games and favorite teams that
+    # missed deep playoff runs never show up.
+    fetch_limit = 1000 if favorite_keys else limit
     for sport in ("NBA", "NFL"):
-        for game in fetch_espn_games(sport, limit=limit, seasons=10):
+        for game in fetch_espn_games(sport, limit=fetch_limit, seasons=10):
             if favorite_keys and not (favorite_keys & _game_team_keys(game)):
                 continue
             rows.append(game)
