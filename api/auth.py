@@ -122,13 +122,15 @@ def get_favorite_teams(user: User = Depends(get_current_user)):
 
 class TeamBody(BaseModel):
     team_id: int
+    sport: Optional[str] = None
 
 
 @router.post("/me/teams")
 def add_favorite_team(body: TeamBody, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     team = db.query(Team).get(body.team_id)
     if not team:
-        for sport in ("NBA", "NFL"):
+        sports = [body.sport.upper()] if body.sport else ["NBA", "NFL"]
+        for sport in sports:
             team_data = next((t for t in fetch_espn_teams(sport) if t["id"] == body.team_id), None)
             if team_data:
                 team = (

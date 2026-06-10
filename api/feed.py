@@ -42,6 +42,11 @@ def get_personalized_feed(
     db: Session = Depends(get_db),
 ):
     favorite_team_ids = [ft.team_id for ft in user.favorite_teams]
+    favorite_team_keys = {
+        (ft.team.sport, ft.team.abbreviation)
+        for ft in user.favorite_teams
+        if ft.team and ft.team.sport and ft.team.abbreviation
+    }
 
     if not favorite_team_ids:
         # Not onboarded yet — return recent games
@@ -59,19 +64,23 @@ def get_personalized_feed(
         )
 
     return {
-        "games": _with_public_games([_serialize_game(g) for g in games], favorite_team_ids, limit),
+        "games": _with_public_games([_serialize_game(g) for g in games], favorite_team_keys, limit),
         "favorite_team_ids": favorite_team_ids,
         "onboarded": bool(favorite_team_ids),
     }
 
 
-def _with_public_games(rows: list[dict], favorite_team_ids: list[int], limit: int) -> list[dict]:
+def _with_public_games(rows: list[dict], favorite_team_keys: set[tuple[str, str]], limit: int) -> list[dict]:
     if len(rows) >= limit:
         return rows
     seen = {row.get("external_id") for row in rows if row.get("external_id")}
     for sport in ("NBA", "NFL"):
         for game in fetch_espn_games(sport, limit=limit):
-            if favorite_team_ids and game["home_team"]["id"] not in favorite_team_ids and game["away_team"]["id"] not in favorite_team_ids:
+            game_keys = {
+                (game["sport"], game["home_team"].get("abbreviation")),
+                (game["sport"], game["away_team"].get("abbreviation")),
+            }
+            if favorite_team_keys and not (favorite_team_keys & game_keys):
                 continue
             if game.get("external_id") in seen:
                 continue

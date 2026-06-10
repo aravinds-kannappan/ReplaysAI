@@ -16,7 +16,7 @@ export default function Onboarding() {
   const navigate = useNavigate();
   const { data: user } = useCurrentUser();
   const addTeam = useAddFavoriteTeam();
-  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const { data: nbaTeams = [], isLoading: nbaLoading } = useQuery<Team[]>({
     queryKey: ["teams", "NBA"],
@@ -28,31 +28,36 @@ export default function Onboarding() {
     queryFn: () => axios.get(apiPath("/api/teams"), { params: { sport: "NFL" } }).then((r) => r.data),
   });
 
-  const favoriteTeams = (user?.favorite_teams ?? []) as { id: number }[];
-  const favTeamIds = new Set<number>(favoriteTeams.map((t) => t.id));
-  const activeIds = selected.size > 0 ? selected : favTeamIds;
+  const favoriteTeams = (user?.favorite_teams ?? []) as { id: number; sport: string; abbreviation: string }[];
+  const favTeamKeys = new Set<string>(favoriteTeams.map((t) => `${t.sport}:${t.abbreviation}`));
+  const activeKeys = selected.size > 0 ? selected : favTeamKeys;
   const visibleNbaTeams = nbaTeams;
   const visibleNflTeams = nflTeams;
 
-  function toggleTeam(id: number) {
+  function teamKey(team: Team) {
+    return `${team.sport}:${team.abbreviation}`;
+  }
+
+  function toggleTeam(team: Team) {
     setSelected((prev) => {
       const next = new Set(prev);
-      favTeamIds.forEach((tid) => next.add(tid));
-      if (next.has(id)) {
-        next.delete(id);
+      favTeamKeys.forEach((key) => next.add(key));
+      const key = teamKey(team);
+      if (next.has(key)) {
+        next.delete(key);
       } else {
-        next.add(id);
+        next.add(key);
       }
       return next;
     });
   }
 
   function continueToFeed() {
-    const ids = Array.from(activeIds);
-    if (!ids.length) return;
+    const teams = [...visibleNbaTeams, ...visibleNflTeams].filter((team) => activeKeys.has(teamKey(team)));
+    if (!teams.length) return;
     window.localStorage.setItem("replaysai:onboarded", "true");
-    window.localStorage.setItem("replaysai:teamIds", JSON.stringify(ids));
-    ids.forEach((id) => addTeam.mutate(id));
+    window.localStorage.setItem("replaysai:teams", JSON.stringify(teams));
+    teams.forEach((team) => addTeam.mutate({ team_id: team.id, sport: team.sport }));
     navigate("/feed");
   }
 
@@ -66,12 +71,13 @@ export default function Onboarding() {
         ) : (
           <div className="team-grid">
             {teams.map((team) => {
-              const isSelected = activeIds.has(team.id) || favTeamIds.has(team.id);
+              const key = teamKey(team);
+              const isSelected = activeKeys.has(key) || favTeamKeys.has(key);
               return (
                 <button
-                  key={team.id}
+                  key={key}
                   className={`team-chip ${isSelected ? "selected" : ""}`}
-                  onClick={() => toggleTeam(team.id)}
+                  onClick={() => toggleTeam(team)}
                 >
                   <span className="chip-abbr">{team.abbreviation}</span>
                   <span className="chip-name">{team.name}</span>
@@ -104,11 +110,11 @@ export default function Onboarding() {
         <button
           className="btn-hero-primary"
           onClick={continueToFeed}
-          disabled={activeIds.size === 0}
+          disabled={activeKeys.size === 0}
         >
-          {activeIds.size === 0
+          {activeKeys.size === 0
             ? "Pick at least one team"
-            : `Continue with ${activeIds.size} team${activeIds.size > 1 ? "s" : ""} →`}
+            : `Continue with ${activeKeys.size} team${activeKeys.size > 1 ? "s" : ""} →`}
         </button>
         <button className="btn-ghost" onClick={() => navigate("/feed")}>Skip for now</button>
       </div>

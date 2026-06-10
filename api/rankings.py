@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -70,15 +70,30 @@ def get_rankings(sport: Optional[str] = Query(None), db: Session = Depends(get_d
     return result
 
 
-@router.get("/teams")
-def get_teams(sport: Optional[str] = Query(None), db: Session = Depends(get_db)):
-    sports_to_seed = [sport.upper()] if sport else ["NBA", "NFL"]
-    for sport_key in sports_to_seed:
-        if db.query(Team).filter(Team.sport == sport_key).count() > 0:
-            continue
-        try:
+def _serialize_team_row(team: Team) -> dict:
+    return {
+        "id": team.id,
+        "name": team.name,
+        "abbreviation": team.abbreviation,
+        "sport": team.sport,
+        "conference": team.conference,
+        "division": team.division,
+    }
+
+
+def _seed_espn_teams(sports: list[str]) -> None:
+    from db.session import get_session_factory
+
+    db = get_session_factory()()
+    try:
+        for sport_key in sports:
             for team_data in fetch_espn_teams(sport_key):
-                if not db.query(Team).filter_by(abbreviation=team_data["abbreviation"], sport=sport_key).first():
+                existing = (
+                    db.query(Team)
+                    .filter(Team.sport == sport_key, Team.abbreviation == team_data["abbreviation"])
+                    .first()
+                )
+                if not existing:
                     db.add(Team(
                         name=team_data["name"],
                         abbreviation=team_data["abbreviation"],
@@ -86,15 +101,26 @@ def get_teams(sport: Optional[str] = Query(None), db: Session = Depends(get_db))
                         conference=team_data["conference"],
                         division=team_data["division"],
                     ))
-            db.commit()
-        except Exception:
-            db.rollback()
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
 
-    q = db.query(Team)
-    if sport:
-        q = q.filter(Team.sport == sport.upper())
-    teams = q.order_by(Team.sport, Team.name).all()
-    if not teams and sport:
+
+@router.get("/teams")
+def get_teams(
+    background_tasks: BackgroundTasks,
+    sport: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    sports_to_seed = [sport.upper()] if sport else ["NBA", "NFL"]
+    espn_teams = []
+    for sport_key in sports_to_seed:
+        espn_teams.extend(fetch_espn_teams(sport_key))
+
+    if espn_teams:
+        background_tasks.add_task(_seed_espn_teams, sports_to_seed)
         return [
             {
                 "id": team["id"],
@@ -104,19 +130,14 @@ def get_teams(sport: Optional[str] = Query(None), db: Session = Depends(get_db))
                 "conference": team["conference"],
                 "division": team["division"],
             }
-            for team in fetch_espn_teams(sport.upper())
+            for team in espn_teams
         ]
-    return [
-        {
-            "id": team.id,
-            "name": team.name,
-            "abbreviation": team.abbreviation,
-            "sport": team.sport,
-            "conference": team.conference,
-            "division": team.division,
-        }
-        for team in teams
-    ]
+
+    q = db.query(Team)
+    if sport:
+        q = q.filter(Team.sport == sport.upper())
+    teams = q.order_by(Team.sport, Team.name).all()
+    return [_serialize_team_row(team) for team in teams]
 
 
 @router.get("/players/{player_id}")

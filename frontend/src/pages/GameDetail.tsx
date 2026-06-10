@@ -70,8 +70,14 @@ export default function GameDetail() {
     ? new Date(game.game_date).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })
     : "";
 
-  const userFavTeamIds = new Set((user?.favorite_teams ?? []).map((t: { id: number }) => t.id));
-  const userHasTeamInGame = userFavTeamIds.has(game.home_team.id ?? 0) || userFavTeamIds.has(game.away_team.id ?? 0);
+  const userFavTeams = (user?.favorite_teams ?? []) as { id: number; sport: string; abbreviation: string | null }[];
+  const userFavTeamIds = new Set(userFavTeams.map((t) => t.id));
+  const userFavTeamKeys = new Set(userFavTeams.map((t) => `${t.sport}:${t.abbreviation}`));
+  const userHasTeamInGame =
+    userFavTeamIds.has(game.home_team.id ?? 0) ||
+    userFavTeamIds.has(game.away_team.id ?? 0) ||
+    userFavTeamKeys.has(`${game.sport}:${game.home_team.abbreviation}`) ||
+    userFavTeamKeys.has(`${game.sport}:${game.away_team.abbreviation}`);
 
   return (
     <div className="page-game-detail">

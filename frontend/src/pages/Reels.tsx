@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import axios from "axios";
 import { useGames } from "../hooks/useGames";
 import ScoreCard from "../components/ScoreCard";
+import { apiPath } from "../lib/api";
 
 type League = "NBA" | "NFL";
 
@@ -14,6 +17,12 @@ export default function Reels() {
   const [league, setLeague] = useState<League>("NBA");
   const [mode, setMode] = useState<"studio" | "cuts" | "explain">("studio");
   const { data } = useGames({ sport: league, limit: 8 });
+  const featuredGame = data?.games?.[0];
+  const { data: reelData, isLoading: reelsLoading } = useQuery({
+    queryKey: ["reel-cuts", featuredGame?.id],
+    queryFn: () => axios.get(apiPath(`/api/games/${featuredGame?.id}/reels`)).then((r) => r.data),
+    enabled: mode === "cuts" && !!featuredGame?.id,
+  });
   const searchUrl = `https://www.google.com/search?q=${league}+highlights+today`;
 
   return (
@@ -67,6 +76,31 @@ export default function Reels() {
           <a href={`https://www.espn.com/${league.toLowerCase()}/`} target="_blank" rel="noreferrer" className="btn-ghost">Open ESPN video hub</a>
         </aside>
       </section>
+
+      {mode === "cuts" && (
+        <section className="dashboard-panel">
+          <div className="panel-heading">
+            <div>
+              <span>Generated reel cuts</span>
+              <h2>{featuredGame ? "2, 5, and 10 minute manifests" : "Choose a game source"}</h2>
+            </div>
+            {reelData?.video_url && <a href={reelData.video_url} target="_blank" rel="noreferrer">Open source</a>}
+          </div>
+          {reelsLoading && <p className="loading-text">Building cut manifests...</p>}
+          {!featuredGame && <p className="empty-state">No game available for reel generation yet.</p>}
+          <div className="summary-list">
+            {reelData?.cuts?.map((cut: { label: string; status: string; estimated_seconds: number; segments: { description: string; clock: string; period: number; play_type: string }[] }) => (
+              <div key={cut.label} className="summary-row">
+                <strong>{cut.label} · {cut.status === "ready" ? `${cut.estimated_seconds}s selected` : "no segments"}</strong>
+                <span>{cut.segments.slice(0, 2).map((segment) => `Q${segment.period} ${segment.clock} ${segment.play_type}: ${segment.description}`).join(" | ") || "ESPN has no eligible play labels for this cut yet."}</span>
+              </div>
+            ))}
+          </div>
+          {reelData?.rendering && (
+            <p className="empty-state">{reelData.rendering.reason}</p>
+          )}
+        </section>
+      )}
 
       <section className="dashboard-panel">
         <div className="panel-heading">

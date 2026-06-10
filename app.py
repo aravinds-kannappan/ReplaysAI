@@ -10,6 +10,7 @@ from api.leaderboards import router as leaderboard_router
 from api.predictions import router as predictions_router
 from api.rankings import router as rankings_router
 from api.recaps import router as recaps_router
+from api.reels import router as reels_router
 from config import get_settings
 from db.models import Badge, Base
 from db.session import get_engine, get_session_factory
@@ -41,6 +42,7 @@ def create_app() -> FastAPI:
     app.include_router(feed_router)
     app.include_router(games_router)
     app.include_router(recaps_router)
+    app.include_router(reels_router)
     app.include_router(rankings_router)
     app.include_router(predictions_router)
     app.include_router(fantasy_router)

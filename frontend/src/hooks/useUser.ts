@@ -24,8 +24,8 @@ export function useAddFavoriteTeam() {
   const { getToken } = useAuth();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (team_id: number) =>
-      authFetch(getToken, "/api/users/me/teams", { method: "post", data: { team_id } }),
+    mutationFn: (team: { team_id: number; sport: string }) =>
+      authFetch(getToken, "/api/users/me/teams", { method: "post", data: team }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["me"] }),
   });
 }
