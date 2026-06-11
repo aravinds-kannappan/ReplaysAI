@@ -117,6 +117,7 @@ async def generate_fan_recap(game_id: int, team: str | None = Query(None)):
         ),
         max_tokens=900,
     )
+    generated_by = "llm" if content else "data"
 
     if not content:
         verdict = "took this one" if won else "came up short"
@@ -131,8 +132,18 @@ async def generate_fan_recap(game_id: int, team: str | None = Query(None)):
             f"## Who Showed Up\n{leader_rows}"
         )
 
-    result = {"game_id": game_id, "content": content, "status": "ready", "team": fan_team.get("abbreviation")}
+    result = {
+        "game_id": game_id,
+        "content": content,
+        "status": "ready",
+        "team": fan_team.get("abbreviation"),
+        "generated_by": generated_by,
+    }
     key = _fan_recap_key(game_id, team)
+    # In-process memo always (the frontend polls the GET right after generating);
+    # durable cache only for LLM output so a transient provider error can't pin
+    # the fallback version.
     _memo_set(key, result)
-    cache_set(key, result)
+    if generated_by == "llm":
+        cache_set(key, result)
     return result

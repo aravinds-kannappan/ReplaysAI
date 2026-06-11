@@ -182,7 +182,7 @@ Structure the recap as Markdown with exactly these sections:
 ## What It Means — stakes and what to watch next for both teams
 
 Aim for 450-650 words. Be concrete: scores, runs, names, periods."""
-    return llm_text(system, prompt)
+    return llm_text(system, prompt, max_tokens=1200)
 
 
 def _data_recap(facts: dict, sport: str) -> str:
@@ -275,7 +275,11 @@ def get_recap(game_id: int):
     _, summary = resolved_summary
 
     result = _build_recap(game_id, sport, game, summary)
-    if game.get("status") == "final":
+    settings = get_settings()
+    llm_configured = bool(settings.anthropic_api_key or settings.openai_api_key)
+    # Never cache a fallback recap when an LLM is configured — a transient
+    # provider error would otherwise pin the lesser recap for hours.
+    if game.get("status") == "final" and (result["generated_by"] == "llm" or not llm_configured):
         _memo_set(cache_key, result)
         cache_set(cache_key, result)
     return result
