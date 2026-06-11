@@ -1,4 +1,6 @@
 """Authenticated assistant endpoint backed by the configured LLM."""
+import threading
+import time
 from typing import Literal
 
 from fastapi import APIRouter, Depends
@@ -8,6 +10,53 @@ from config import get_settings
 from middleware.clerk_auth import AuthUser, get_current_user
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
+
+_health_lock = threading.Lock()
+_health_cache: tuple[float, dict] | None = None
+
+
+@router.get("/health")
+def chat_health():
+    """Cheap diagnostic: is the configured LLM provider actually reachable?
+    Result is cached in-process for 10 minutes; the probe costs ~1 output token."""
+    global _health_cache
+    with _health_lock:
+        if _health_cache and time.monotonic() - _health_cache[0] < 600:
+            return _health_cache[1]
+
+    settings = get_settings()
+    if settings.anthropic_api_key:
+        provider, model = "anthropic", settings.anthropic_model
+        try:
+            import anthropic
+
+            anthropic.Anthropic(api_key=settings.anthropic_api_key).messages.create(
+                model=model,
+                max_tokens=1,
+                messages=[{"role": "user", "content": "ping"}],
+            )
+            result = {"ok": True, "provider": provider, "model": model}
+        except Exception as exc:
+            result = {"ok": False, "provider": provider, "model": model, "detail": str(exc)[:300]}
+    elif settings.openai_api_key:
+        provider, model = "openai", settings.openai_model
+        try:
+            from openai import OpenAI
+
+            OpenAI(api_key=settings.openai_api_key).chat.completions.create(
+                model=model,
+                max_tokens=1,
+                messages=[{"role": "user", "content": "ping"}],
+            )
+            result = {"ok": True, "provider": provider, "model": model}
+        except Exception as exc:
+            result = {"ok": False, "provider": provider, "model": model, "detail": str(exc)[:300]}
+    else:
+        result = {"ok": False, "provider": None, "model": None, "detail": "No LLM API key configured in this environment"}
+
+    with _health_lock:
+        _health_cache = (time.monotonic(), result)
+    return result
 
 
 class ChatBody(BaseModel):
