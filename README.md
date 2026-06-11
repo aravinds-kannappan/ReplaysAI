@@ -8,7 +8,7 @@ Replays AI is a personalized sports fan platform that combines real play-by-play
 
 Sports media has a content abundance problem: every game generates hours of footage, thousands of structured events, and an audience that wants personalized, contextual highlights — not a broadcast edited for the median fan.
 
-Replays AI closes this gap by ingesting structured play-by-play data, aligning it to video via computer vision, and using LLMs to generate recaps that reflect how a specific fan watches the game. The product is now organized around a command center after login: personalized feed, live game stream, assistant chat, predictions, roster outlook, and agent status tabs in one place.
+Replays AI closes this gap by ingesting structured play-by-play data, letting agents choose the story arc, and generating watchable short-form recaps that reflect how a specific fan watches the game. The product is now organized around a command center after login: personalized feed, live games, assistant chat, predictions, roster outlook, generated reels, and agent status tabs in one place.
 
 ---
 
@@ -21,7 +21,7 @@ Replays AI closes this gap by ingesting structured play-by-play data, aligning i
 | Cache | Redis 7 optional |
 | AI | OpenAI or Anthropic for chatbot/recap text |
 | Sports Data | ESPN unofficial API (NBA + NFL, no key required) |
-| Video | YouTube Data API v3, yt-dlp, OpenCV |
+| Generated reels | Agent-built story manifests rendered in React |
 | Auth | Clerk (JWT, React SDK) |
 | Frontend | React 18, TypeScript, Vite, TanStack Query, React Router |
 
@@ -41,7 +41,6 @@ Recommended:
 | Service | Env var | Why |
 |---------|---------|-----|
 | Redis | `REDIS_URL` | Cache ESPN-derived standings, recaps, and repeated agent outputs |
-| YouTube Data API | `YOUTUBE_API_KEY` | Better highlight/video discovery for reels |
 
 Not required:
 
@@ -49,8 +48,8 @@ Not required:
 |---------|-------------|-------|
 | ESPN public data | No | NBA/NFL teams, athletes, scoreboards, summaries, and play labels use public ESPN endpoints with sport/league slugs. |
 
-If `ANTHROPIC_API_KEY` is not set, `/api/chat` returns a setup message instead of pretending to be intelligent.
-`OPENAI_API_KEY` is also supported and is checked first.
+If no provider works, `/api/chat` degrades to a local app-aware reply instead of failing the page.
+Anthropic is tried first when `ANTHROPIC_API_KEY` is set; `OPENAI_API_KEY` is supported as a fallback provider.
 
 ---
 
@@ -103,14 +102,14 @@ User layer: `users`, `user_favorite_teams`, `user_followed_players`, `prediction
 The authenticated app now opens into a tabbed dashboard:
 
 - Feed: personalized games, post-game recap queue, and agent activity
-- Reels: computer-vision highlight studio with search rails, moment tags, frame scanning, game attachment, and nested modes for Vision Studio, 2/5/10 minute cuts, and explained reels
+- Reels: generated short-form story studio with game attachment, user-prompted focus, and 2/5/10 minute agent-built reels
 - Picks: matchup desk for locking NBA/NFL predictions
 - Roster: fantasy arena for drafting players, player duels, and future-season what-if tabs
 - Leaders: competitive ladder with global, rivals, and badges tabs
 - Global assistant: bottom-right chatbot available across authenticated pages and backed by `/api/chat` with Claude when `ANTHROPIC_API_KEY` is configured
 
 ### AI Recaps
-Generated from real ESPN play-by-play via 3 parallel agents. Task-split structure: First Half, Second Half, Player Spotlight, Defining Moment. Sub-second retrieval from Redis cache after first generation.
+Generated from play-by-play, score flow, leaders, and key moments via agent prompts. The recap should explain the game, not describe the source that supplied the facts.
 
 ### Fan Mode (Agent 4)
 "My Team's View" tab on any game your team played. Claude rewrites the recap for your team's fans. Tone adapts dynamically: wins get energy, losses get honest analysis. Cached permanently per user per game.
@@ -193,7 +192,7 @@ ReplaysAI/
 ├── middleware/
 │   └── clerk_auth.py          # Clerk JWT verification + user auto-create
 ├── video/
-│   ├── youtube_search.py      # YouTube Data API v3 search
+│   ├── youtube_search.py      # Legacy/offline external video search helper
 │   └── frame_extractor.py     # yt-dlp download + OpenCV frame extraction
 ├── cache/
 │   └── redis_client.py        # JSON cache with TTL helpers
@@ -335,8 +334,8 @@ Backend:
   instances are detected automatically from the token.
 - `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` — optional, but required for true LLM chatbot responses.
 - `OPENAI_MODEL` or `ANTHROPIC_MODEL` — optional model overrides.
+- `ANTHROPIC_FALLBACK_MODELS` — optional comma-separated Anthropic model IDs tried after `ANTHROPIC_MODEL`.
 - `REDIS_URL` — optional hosted Redis connection string.
-- `YOUTUBE_API_KEY` — optional but recommended for highlight video discovery.
 - `ALLOWED_ORIGINS` — comma-separated frontend origins, for example
   `https://your-app.vercel.app,http://localhost:5173`.
 
@@ -370,8 +369,8 @@ Backend (`.env`):
 | `OPENAI_MODEL` | Optional | Defaults to `gpt-4o-mini` |
 | `ANTHROPIC_API_KEY` | For AI features | Anthropic API key if OpenAI is not set |
 | `ANTHROPIC_MODEL` | Optional | Defaults to `claude-opus-4-8` |
+| `ANTHROPIC_FALLBACK_MODELS` | Optional | Comma-separated fallback model IDs |
 | `REDIS_URL` | Optional | Redis connection string |
-| `YOUTUBE_API_KEY` | Optional | YouTube Data API v3 key |
 | `ALLOWED_ORIGINS` | Yes in production | Comma-separated allowed frontend origins |
 
 Frontend (`frontend/.env.local`):
@@ -468,9 +467,11 @@ python -m ingestion.nfl_ingester --mode live
 
 ---
 
-## CV Pipeline
+## Optional Offline CV Pipeline
 
-1. Video discovery: searches YouTube for "{team1} vs {team2} {date} highlights {sport}"
+The production reel player does not link users to YouTube. These tools are for optional offline ingestion experiments only.
+
+1. Video discovery: searches for external highlight material for offline processing
 2. Download: yt-dlp at max 480p MP4, audio stripped
 3. Frame extraction: OpenCV at 1 frame per 3 seconds, max 60 frames
 4. Batch inference: 5 frames per Claude Vision API call

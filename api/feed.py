@@ -10,7 +10,7 @@ from api.espn_public import (
     fetch_espn_game_by_id,
     fetch_espn_summary_by_id,
 )
-from api.recaps import _memo_get, _memo_set, llm_text
+from api.recaps import _lead_changes, _memo_get, _memo_set, _period_label, _period_scores, llm_text
 from cache.redis_client import cache_get, cache_set
 
 router = APIRouter(prefix="/api", tags=["feed"])
@@ -90,7 +90,8 @@ async def generate_fan_recap(game_id: int, team: str | None = Query(None)):
     other_score = game["home_score"] if other_team is home else game["away_score"]
 
     leaders = extract_summary_leaders(summary)
-    plays = [p for p in extract_summary_plays(summary, sport, limit=300) if p.get("play_type") != "other"][-12:]
+    all_plays = extract_summary_plays(summary, sport, limit=300)
+    plays = [p for p in all_plays if p.get("play_type") != "other"][-16:]
     leader_lines = "\n".join(f"{r['team']} — {r['player']}: {r['stat_line']} ({r['category']})" for r in leaders)
     play_lines = "\n".join(
         f"P{p.get('period')} {p.get('clock') or ''}: {p.get('description')}" for p in plays
@@ -124,11 +125,36 @@ async def generate_fan_recap(game_id: int, team: str | None = Query(None)):
         leader_rows = "\n".join(
             f"- **{r['player']}** ({r['team']}) — {r['stat_line']} {r['category'].lower()}" for r in leaders
         ) or "- Leaders not published yet."
+        play_rows = "\n".join(
+            f"- **{_period_label(sport, p.get('period') or 1)} {p.get('clock') or ''}** — "
+            f"{p.get('description')} ({away.get('abbreviation')} {p.get('away_score')}-"
+            f"{p.get('home_score')} {home.get('abbreviation')})."
+            for p in plays[-10:]
+        ) or "- Play-by-play details are still filling in."
+        periods = _period_scores(all_plays, sport)
+        period_rows = "\n".join(
+            f"| {row['label']} | {row['away']} | {row['home']} |" for row in periods
+        )
+        period_table = (
+            f"| Period | {away.get('abbreviation')} | {home.get('abbreviation')} |\n"
+            f"|---|---:|---:|\n{period_rows}"
+            if period_rows else "Period scoring is still filling in."
+        )
+        lead_changes = _lead_changes(all_plays)
+        emotional_read = (
+            "The best part: the scoreboard pressure eventually matched the box-score production."
+            if won else
+            "The frustrating part: the decisive possessions arrived in a tight cluster, and there was not enough response after that."
+        )
         content = (
             f"# {fan_team.get('name')} {verdict}, "
             f"{fan_score if fan_score is not None else '—'}-{other_score if other_score is not None else '—'}\n\n"
             f"## How It Went\nAgainst {other_team.get('name')} on {(game.get('game_date') or '')[:10]}, "
-            f"the scoreboard ended {away.get('name')} {game.get('away_score')}, {home.get('name')} {game.get('home_score')}.\n\n"
+            f"the scoreboard ended {away.get('name')} {game.get('away_score')}, {home.get('name')} {game.get('home_score')}. "
+            f"There were {lead_changes} lead change{'s' if lead_changes != 1 else ''}, so the story was not just the final margin; "
+            f"it was which side handled the pressure possessions better. {emotional_read}\n\n"
+            f"## Score Flow\n{period_table}\n\n"
+            f"## Turning Points\n{play_rows}\n\n"
             f"## Who Showed Up\n{leader_rows}"
         )
 

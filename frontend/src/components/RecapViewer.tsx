@@ -59,7 +59,7 @@ export default function RecapViewer({ gameId, gameStatus }: Props) {
       <ReactMarkdown>{data.content}</ReactMarkdown>
       {data.cv_classifications !== undefined && (
         <p className="recap-meta">
-          CV classified {data.cv_classifications} highlight frames
+          {data.cv_classifications} notable plays shaped this recap
         </p>
       )}
     </div>

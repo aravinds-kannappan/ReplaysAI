@@ -12,7 +12,7 @@ import RecapViewer from "../components/RecapViewer";
 import HighlightReel from "../components/HighlightReel";
 import PlayTimeline from "../components/PlayTimeline";
 
-type Tab = "recap" | "fan" | "highlights" | "plays";
+type Tab = "recap" | "fan" | "reels" | "plays";
 
 async function authFetch(getToken: () => Promise<string | null>, url: string, options: Record<string, unknown> = {}) {
   const token = await getToken();
@@ -149,9 +149,9 @@ export default function GameDetail() {
       </div>
 
       <div className="tab-bar">
-        {(["recap", ...(userHasTeamInGame ? ["fan"] : []), "highlights", "plays"] as Tab[]).map((t) => (
+        {(["recap", ...(userHasTeamInGame ? ["fan"] : []), "reels", "plays"] as Tab[]).map((t) => (
           <button key={t} className={`tab-btn ${tab === t ? "active" : ""}`} onClick={() => setTab(t)}>
-            {t === "fan" ? "🏀 My Team" : t.charAt(0).toUpperCase() + t.slice(1)}
+            {t === "fan" ? "My Team" : t.charAt(0).toUpperCase() + t.slice(1)}
           </button>
         ))}
       </div>
@@ -175,7 +175,7 @@ export default function GameDetail() {
             )}
           </div>
         )}
-        {tab === "highlights" && <HighlightReel gameId={gameId} />}
+        {tab === "reels" && <HighlightReel gameId={gameId} />}
         {tab === "plays" && <PlayTimeline gameId={gameId} />}
       </div>
     </div>

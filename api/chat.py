@@ -30,14 +30,36 @@ def chat_health():
         try:
             import anthropic
 
-            anthropic.Anthropic(api_key=settings.anthropic_api_key).messages.create(
-                model=model,
-                max_tokens=1,
-                messages=[{"role": "user", "content": "ping"}],
-            )
-            result = {"ok": True, "provider": provider, "model": model}
+            client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+            errors = []
+            for model in settings.anthropic_models:
+                try:
+                    client.messages.create(
+                        model=model,
+                        max_tokens=1,
+                        messages=[{"role": "user", "content": "ping"}],
+                    )
+                    result = {
+                        "ok": True,
+                        "provider": provider,
+                        "model": model,
+                        "key_present": True,
+                        "fallback_models": settings.anthropic_models[1:],
+                    }
+                    break
+                except Exception as exc:
+                    errors.append(f"{model}: {type(exc).__name__}: {str(exc)[:180]}")
+            else:
+                result = {
+                    "ok": False,
+                    "provider": provider,
+                    "model": model,
+                    "key_present": True,
+                    "fallback_models": settings.anthropic_models[1:],
+                    "detail": " | ".join(errors)[:500],
+                }
         except Exception as exc:
-            result = {"ok": False, "provider": provider, "model": model, "detail": str(exc)[:300]}
+            result = {"ok": False, "provider": provider, "model": model, "key_present": True, "detail": str(exc)[:300]}
     elif settings.openai_api_key:
         provider, model = "openai", settings.openai_model
         try:
@@ -48,11 +70,11 @@ def chat_health():
                 max_tokens=1,
                 messages=[{"role": "user", "content": "ping"}],
             )
-            result = {"ok": True, "provider": provider, "model": model}
+            result = {"ok": True, "provider": provider, "model": model, "key_present": True}
         except Exception as exc:
-            result = {"ok": False, "provider": provider, "model": model, "detail": str(exc)[:300]}
+            result = {"ok": False, "provider": provider, "model": model, "key_present": True, "detail": str(exc)[:300]}
     else:
-        result = {"ok": False, "provider": None, "model": None, "detail": "No LLM API key configured in this environment"}
+        result = {"ok": False, "provider": None, "model": None, "key_present": False, "detail": "No LLM API key configured in this environment"}
 
     with _health_lock:
         _health_cache = (time.monotonic(), result)
@@ -105,15 +127,15 @@ def _local_reply(body: ChatBody, user: AuthUser) -> str:
     if any(word in text for word in ["recap", "summary", "explain"]):
         return (
             f"I can explain this from {context}{team_hint}. Open a game card and use Recap or Plays; "
-            "the app pulls ESPN scoreboard and summary data so the answer is based on the selected matchup."
+            "I will focus on the score flow, turning points, player production, and what changed the game."
         )
     if any(word in text for word in ["reel", "video", "highlight", "clip"]):
         return (
-            "For reels, start from the Highlights tab. I will use stored CV classifications first, then real ESPN play labels and YouTube highlight search context when available."
+            "For reels, open the Reels tab on a game or the main Reels studio. Tell me the focus and length, then I will build a generated story reel instead of sending you to a video link."
         )
     if any(word in text for word in ["pick", "prediction", "who wins", "bet"]):
         return (
-            f"My read: compare current score/status, favorite-team context{team_hint}, and recent ESPN play detail before locking a pick. "
+            f"My read: compare current score/status, favorite-team context{team_hint}, and recent play detail before locking a pick. "
             "For scheduled games, pick from the game detail card so it can be scored later."
         )
     if any(word in text for word in ["roster", "player", "fantasy", "draft"]):
@@ -135,15 +157,19 @@ def _llm_reply(system: str, app_context: str, conversation: list[dict[str, str]]
             import anthropic
 
             client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-            response = client.messages.create(
-                model=settings.anthropic_model,
-                max_tokens=700,
-                system=f"{system}\n\n{app_context}",
-                messages=conversation,
-            )
-            return response.content[0].text.strip(), "anthropic"
+            for model in settings.anthropic_models:
+                try:
+                    response = client.messages.create(
+                        model=model,
+                        max_tokens=700,
+                        system=f"{system}\n\n{app_context}",
+                        messages=conversation,
+                    )
+                    return response.content[0].text.strip(), f"anthropic:{model}"
+                except Exception as exc:
+                    print(f"[chat] Anthropic call failed ({model}): {exc}")
         except Exception as exc:
-            print(f"[chat] Anthropic call failed ({settings.anthropic_model}): {exc}")
+            print(f"[chat] Anthropic client failed: {exc}")
 
     if settings.openai_api_key:
         try:

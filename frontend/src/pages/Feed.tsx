@@ -34,16 +34,14 @@ const AGENTS = [
   { name: "Forecast", status: "Prepares picks, roster outlooks, and what-if simulations." },
 ];
 
-const LEAGUE_META: Record<League, { name: string; search: string; stream: string; cues: string[] }> = {
+const LEAGUE_META: Record<League, { name: string; stream: string; cues: string[] }> = {
   NBA: {
     name: "NBA",
-    search: "https://www.google.com/search?q=NBA+highlights+today",
     stream: "https://www.espn.com/nba/",
     cues: ["Shot quality", "Run detector", "Star usage", "Clutch swings"],
   },
   NFL: {
     name: "NFL",
-    search: "https://www.google.com/search?q=NFL+highlights+today",
     stream: "https://www.espn.com/nfl/",
     cues: ["Drive success", "Explosive plays", "QB pressure", "Red-zone swings"],
   },
@@ -180,7 +178,7 @@ function LeagueSwitch({ league, onChange }: { league: League; onChange: (league:
   return (
     <div className="league-switch" aria-label="League switch">
       {(["NBA", "NFL"] as League[]).map((item) => (
-        <button key={item} className={league === item ? "active" : ""} onClick={() => onChange(item)}>
+        <button type="button" key={item} className={league === item ? "active" : ""} onClick={() => onChange(item)}>
           {item}
         </button>
       ))}
@@ -230,6 +228,7 @@ export default function Feed() {
 
   const live = liveGames?.games ?? [];
   const leagueUpcoming = upcomingGames.filter((game: { sport: string }) => game.sport === league);
+  const featuredLive = live[0];
 
   return (
     <div className={`app-shell league-${league.toLowerCase()}`}>
@@ -238,6 +237,7 @@ export default function Feed() {
         <nav className="sidebar-nav">
           {TABS.map((tab) => (
             <button
+              type="button"
               key={tab.id}
               className={activeTab === tab.id ? "active" : ""}
               onClick={() => setActiveTab(tab.id)}
@@ -346,7 +346,7 @@ export default function Feed() {
             <div className="panel-heading">
               <div>
                 <span>{league} every 30 seconds</span>
-                <h2>Live highlight control room</h2>
+                <h2>Live reel control room</h2>
               </div>
               <a href={LEAGUE_META[league].stream} target="_blank" rel="noreferrer">ESPN hub</a>
             </div>
@@ -356,10 +356,16 @@ export default function Feed() {
                 <div className="live-puck">{league}</div>
                 <div className="live-rink-copy">
                   <strong>{live.length ? `${live.length} games live` : "No live games right now"}</strong>
-                  <span>When games are active, this panel becomes the fast lane into highlights, play timeline, and recap generation.</span>
+                  <span>When games are active, this panel becomes the fast lane into generated reels, play timeline, and recap generation.</span>
                 </div>
               </div>
               <SignalBoard league={league} />
+            </div>
+            <div className="live-actions-row">
+              <Link className="btn-primary" to={featuredLive ? `/game/${featuredLive.id}` : "/reels"}>
+                {featuredLive ? "Open live game reels" : "Open reel studio"}
+              </Link>
+              <Link className="btn-ghost" to="/reels">Prompt a custom reel</Link>
             </div>
             <div className="games-grid compact">
               {live.map((game) => <ScoreCard key={game.id} game={game} />)}
@@ -374,14 +380,13 @@ export default function Feed() {
                 <span>Conversational layer</span>
                 <h2>Ask ReplaysAI about {league}</h2>
               </div>
-              <a href={LEAGUE_META[league].search} target="_blank" rel="noreferrer">Google highlights</a>
+              <Link to="/reels">Open reels</Link>
             </div>
             <div className="research-layout">
               <AssistantChat games={games} league={league} />
               <aside className="research-panel">
                 <strong>Research rails</strong>
-                <a href={LEAGUE_META[league].search} target="_blank" rel="noreferrer">Search today&apos;s highlights</a>
-                <a href={LEAGUE_META[league].stream} target="_blank" rel="noreferrer">Open ESPN league page</a>
+                <Link to="/reels">Generate a story reel</Link>
                 <Link to="/roster">Simulate roster impact</Link>
                 <Link to="/predictions">Turn answer into a pick</Link>
               </aside>

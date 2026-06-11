@@ -36,24 +36,38 @@ def _memo_set(key: str, value: dict) -> None:
         _recap_cache[key] = (time.monotonic(), value)
 
 
+# Last provider failure, surfaced in responses that fell back to data
+# generation — Vercel function logs are not always at hand.
+_last_llm_error: str | None = None
+
+
 def llm_text(system: str, prompt: str, max_tokens: int = 1500) -> str | None:
     """One LLM completion; None when no provider is configured or the call fails."""
+    global _last_llm_error
     settings = get_settings()
+    _last_llm_error = None
 
     if settings.anthropic_api_key:
         try:
             import anthropic
 
             client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-            response = client.messages.create(
-                model=settings.anthropic_model,
-                max_tokens=max_tokens,
-                system=system,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            return response.content[0].text.strip()
+            for model in settings.anthropic_models:
+                try:
+                    response = client.messages.create(
+                        model=model,
+                        max_tokens=max_tokens,
+                        system=system,
+                        messages=[{"role": "user", "content": prompt}],
+                    )
+                    _last_llm_error = None
+                    return response.content[0].text.strip()
+                except Exception as exc:
+                    _last_llm_error = f"anthropic/{model}: {type(exc).__name__}: {str(exc)[:300]}"
+                    print(f"[recaps] {_last_llm_error}")
         except Exception as exc:
-            print(f"[recaps] Anthropic call failed ({settings.anthropic_model}): {exc}")
+            _last_llm_error = f"anthropic/client: {type(exc).__name__}: {str(exc)[:300]}"
+            print(f"[recaps] {_last_llm_error}")
 
     if settings.openai_api_key:
         try:
@@ -68,9 +82,11 @@ def llm_text(system: str, prompt: str, max_tokens: int = 1500) -> str | None:
                     {"role": "user", "content": prompt},
                 ],
             )
+            _last_llm_error = None
             return (response.choices[0].message.content or "").strip()
         except Exception as exc:
-            print(f"[recaps] OpenAI call failed ({settings.openai_model}): {exc}")
+            _last_llm_error = f"openai/{settings.openai_model}: {type(exc).__name__}: {str(exc)[:300]}"
+            print(f"[recaps] {_last_llm_error}")
 
     return None
 
@@ -112,11 +128,36 @@ def _lead_changes(plays: list[dict]) -> int:
     return changes
 
 
-def _key_plays(plays: list[dict], limit: int = 10) -> list[dict]:
+def _play_weight(play: dict) -> int:
+    weights = {
+        "touchdown": 10,
+        "dunk": 9,
+        "three_pointer": 8,
+        "interception": 8,
+        "sack": 7,
+        "block": 7,
+        "steal": 7,
+        "field_goal": 6,
+        "turnover": 6,
+        "assist": 5,
+        "shot": 4,
+    }
+    score = weights.get(play.get("play_type") or "other", 1)
+    if "miss" in (play.get("description") or "").lower():
+        score = max(1, score - 5)
+    return score
+
+
+def _key_plays(plays: list[dict], limit: int = 16) -> list[dict]:
     interesting = [play for play in plays if play.get("play_type") not in (None, "other")]
     if not interesting:
         interesting = [play for play in plays if play.get("description")]
-    return interesting[-limit:]
+    if len(interesting) <= limit:
+        return interesting
+    late = interesting[-max(4, limit // 3):]
+    best = sorted(interesting, key=lambda play: (-_play_weight(play), play.get("id") or 0))[:limit]
+    selected = {id(play): play for play in best + late}
+    return sorted(selected.values(), key=lambda play: play.get("id") or 0)[:limit]
 
 
 def _game_facts(game: dict, plays: list[dict], leaders: list[dict], sport: str) -> dict:
@@ -192,9 +233,12 @@ def _data_recap(facts: dict, sport: str) -> str:
         winner = home if facts["home_score"] > facts["away_score"] else away
         margin = abs(facts["home_score"] - facts["away_score"])
         scoreline = f"{away} {facts['away_score']}, {home} {facts['home_score']}"
+        loser = away if winner == home else home
         story = (
-            f"{winner} won by {margin} in a game with {facts['lead_changes']} lead "
-            f"change{'s' if facts['lead_changes'] != 1 else ''}."
+            f"{winner} beat {loser} by {margin}. The shape of the game matters as much as "
+            f"the margin: it produced {facts['lead_changes']} lead change"
+            f"{'s' if facts['lead_changes'] != 1 else ''}, and the important possessions "
+            "came in clusters rather than one isolated highlight."
         )
     else:
         scoreline = f"{away} at {home}"
@@ -211,18 +255,42 @@ def _data_recap(facts: dict, sport: str) -> str:
         f"- **{row['player']}** ({row['team']}) — {row['stat_line']} {row['category'].lower()}"
         for row in facts["leaders"]
     ) or "- Box score leaders have not been published yet."
-    moment_rows = "\n".join(
-        f"- {_period_label(sport, play.get('period') or 1)} {play.get('clock') or ''} — "
-        f"{play.get('description')} "
-        f"({facts['away_abbr']} {play.get('away_score')}-{play.get('home_score')} {facts['home_abbr']})"
-        for play in facts["key_plays"]
-    ) or "- Play-by-play detail has not been published yet."
+    moment_rows = []
+    for play in facts["key_plays"]:
+        label = _period_label(sport, play.get("period") or 1)
+        score = (
+            f"{facts['away_abbr']} {play.get('away_score')}-{play.get('home_score')} {facts['home_abbr']}"
+            if play.get("away_score") is not None and play.get("home_score") is not None
+            else "score unavailable"
+        )
+        moment_rows.append(
+            f"- **{label} {play.get('clock') or ''}** — {play.get('description')} ({score})."
+        )
+    moment_text = "\n".join(moment_rows) or "- Play-by-play detail has not been published yet."
+
+    leaders = facts["leaders"][:6]
+    star_context = (
+        "The statistical shape was led by "
+        + "; ".join(
+            f"{row['player']} for {row['team']} with {row['stat_line']} {row['category'].lower()}"
+            for row in leaders[:4]
+        )
+        + "."
+        if leaders else
+        "The detailed box-score leader feed has not posted yet, so the current read leans on scoring flow and play sequence."
+    )
 
     return f"""# {away} at {home} — {facts['date']}
 **{scoreline}**
 
 ## The Story
 {story}
+
+{star_context}
+
+The period scores show where the game tilted. Read them as chapters: which team
+banked early control, which team answered, and whether the final margin came
+from one decisive push or a steady accumulation of small wins.
 
 ## Scoring by Period
 {period_table}
@@ -231,7 +299,12 @@ def _data_recap(facts: dict, sport: str) -> str:
 {leader_rows}
 
 ## Key Moments
-{moment_rows}
+{moment_text}
+
+## What It Means
+The useful takeaway is the pattern: who controlled the score, which possessions
+changed leverage, and which players supplied the production that made the result
+hold.
 """
 
 
@@ -251,13 +324,16 @@ def _build_recap(game_id: int, sport: str, game: dict, summary: dict) -> dict:
     if not content:
         content = _data_recap(facts, sport)
 
-    return {
+    result = {
         "game_id": game_id,
         "content": content,
         "status": "ready",
         "generated_by": generated_by,
         "cv_classifications": len(facts["key_plays"]),
     }
+    if generated_by == "data" and _last_llm_error:
+        result["llm_error"] = _last_llm_error
+    return result
 
 
 @router.get("/{game_id}/recap")

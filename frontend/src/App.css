@@ -492,6 +492,13 @@ a { color: inherit; text-decoration: none; }
   margin-bottom: 14px;
 }
 
+.live-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 14px;
+}
+
 .live-rink,
 .prediction-orbit,
 .research-panel,
@@ -1543,3 +1550,48 @@ a { color: inherit; text-decoration: none; }
 .reel-play-btn { white-space: nowrap; }
 .reel-agent-heading { margin-top: 22px; }
 .reel-agent .chat-log { max-height: 220px; }
+
+/* Story reel player */
+.story-player { display: flex; flex-direction: column; gap: 0; margin-bottom: 18px; border: 1px solid var(--border); border-radius: 16px; overflow: hidden; background: linear-gradient(160deg, #0c1020 0%, #131a33 55%, #0d1226 100%); }
+.story-progress { display: flex; gap: 4px; padding: 10px 12px 0; }
+.story-progress span { flex: 1; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.16); cursor: pointer; overflow: hidden; }
+.story-progress span i { display: block; height: 100%; background: var(--accent); transition: width 0.12s linear; }
+.story-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px 0; }
+.story-top div { display: flex; flex-direction: column; gap: 2px; }
+.story-kicker { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
+.story-stage { position: relative; min-height: 330px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 26px 28px 30px; text-align: center; cursor: pointer; animation: story-scene-in 0.45s ease; }
+@keyframes story-scene-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.story-heading { font-size: 0.8rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); border: 1px solid var(--border); padding: 4px 12px; border-radius: 999px; }
+.story-scoreboard { display: flex; align-items: baseline; gap: 14px; font-size: 2rem; font-weight: 800; color: var(--text-muted); }
+.story-scoreboard .leading { color: var(--text); }
+.story-scoreboard b { font-size: 1rem; opacity: 0.75; }
+.story-scoreboard i { font-style: normal; opacity: 0.4; }
+.story-text { font-size: 1.15rem; font-weight: 600; max-width: 620px; line-height: 1.4; }
+.story-text.big { font-size: 1.8rem; font-weight: 800; line-height: 1.25; }
+.story-narration { max-width: 560px; color: var(--text-muted); font-size: 1rem; line-height: 1.55; animation: story-narration-in 0.9s ease 0.25s backwards; }
+@keyframes story-narration-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.story-stats { display: flex; flex-direction: column; gap: 8px; width: min(520px, 100%); }
+.story-stat-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 9px 14px; border: 1px solid var(--border); border-radius: 10px; background: rgba(255, 255, 255, 0.04); animation: story-stat-in 0.5s ease backwards; }
+@keyframes story-stat-in { from { opacity: 0; transform: translateX(-14px); } to { opacity: 1; transform: none; } }
+.story-stat-row b { color: var(--accent); white-space: nowrap; }
+.story-paused { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); font-size: 0.78rem; color: var(--text-muted); letter-spacing: 0.08em; text-transform: uppercase; }
+.story-controls { display: flex; align-items: center; gap: 8px; padding: 0 16px 14px; }
+.story-meta { margin-left: auto; font-size: 0.82rem; color: var(--text-muted); }
+.scene-run .story-stage .story-heading, .scene-verdict .story-stage .story-heading { border-color: var(--accent); color: var(--accent); }
+
+/* Possession animation */
+.story-court { width: min(360px, 80%); opacity: 0.95; }
+.story-court .court-floor { fill: rgba(255, 255, 255, 0.03); stroke: rgba(255, 255, 255, 0.14); }
+.story-court .court-line { fill: none; stroke: rgba(255, 255, 255, 0.18); stroke-width: 1.5; }
+.story-court .court-rim { fill: var(--accent); }
+.story-court .court-path { fill: none; stroke: rgba(255, 255, 255, 0.22); stroke-width: 1.5; stroke-dasharray: 5 5; }
+.story-court .court-ball { fill: #f7b733; }
+.ball-drive { offset-path: path("M 24 60 Q 120 58 182 47"); animation: ball-travel 1.6s ease-in-out 0.3s both; }
+.ball-arc-deep { offset-path: path("M 30 70 Q 110 -18 184 41"); animation: ball-travel 1.8s ease-in-out 0.3s both; }
+.ball-reverse { offset-path: path("M 184 45 Q 100 70 24 30"); animation: ball-travel 1.5s ease-in 0.3s both; }
+@keyframes ball-travel { from { offset-distance: 0%; } to { offset-distance: 100%; } }
+
+/* Reel agent quick prompts */
+.quick-prompts { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 0; }
+.quick-prompts button { padding: 6px 14px; border-radius: 999px; border: 1px solid var(--border); background: none; color: var(--text-muted); font-size: 0.82rem; font-weight: 600; cursor: pointer; }
+.quick-prompts button:hover { border-color: var(--accent); color: var(--accent); }
