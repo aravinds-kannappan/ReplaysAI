@@ -8,18 +8,20 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from api.espn_public import fetch_espn_game_by_id, fetch_espn_games
-from middleware.clerk_auth import AuthUser, get_current_user
+from middleware.clerk_auth import AuthUser, get_current_user, get_optional_user
 
 router = APIRouter(prefix="/api/predictions", tags=["predictions"])
 
 
+# Read endpoints are public ESPN passthroughs and picks live in the browser, so
+# they tolerate missing/failed auth instead of blanking the Predictions tab.
 @router.get("")
-def list_predictions(_status: Optional[str] = None, _user: AuthUser = Depends(get_current_user)):
+def list_predictions(_status: Optional[str] = None, _user: Optional[AuthUser] = Depends(get_optional_user)):
     return []
 
 
 @router.get("/upcoming")
-def upcoming_games(_user: AuthUser = Depends(get_current_user)):
+def upcoming_games(_user: Optional[AuthUser] = Depends(get_optional_user)):
     rows = []
     for sport in ("NBA", "NFL"):
         for game in fetch_espn_games(sport, limit=40, seasons=1):

@@ -76,9 +76,49 @@ def _local_reply(body: ChatBody, user: AuthUser) -> str:
     )
 
 
+def _llm_reply(system: str, app_context: str, conversation: list[dict[str, str]]) -> tuple[str, str] | None:
+    """Try each configured provider; return (reply, source) or None so the
+    endpoint can degrade to the local reply instead of returning a 500."""
+    settings = get_settings()
+
+    if settings.anthropic_api_key:
+        try:
+            import anthropic
+
+            client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+            response = client.messages.create(
+                model=settings.anthropic_model,
+                max_tokens=700,
+                system=f"{system}\n\n{app_context}",
+                messages=conversation,
+            )
+            return response.content[0].text.strip(), "anthropic"
+        except Exception as exc:
+            print(f"[chat] Anthropic call failed ({settings.anthropic_model}): {exc}")
+
+    if settings.openai_api_key:
+        try:
+            from openai import OpenAI
+
+            client = OpenAI(api_key=settings.openai_api_key)
+            response = client.chat.completions.create(
+                model=settings.openai_model,
+                max_tokens=700,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": app_context},
+                    *conversation,
+                ],
+            )
+            return (response.choices[0].message.content or "").strip(), "openai"
+        except Exception as exc:
+            print(f"[chat] OpenAI call failed ({settings.openai_model}): {exc}")
+
+    return None
+
+
 @router.post("")
 def chat(body: ChatBody, user: AuthUser = Depends(get_current_user)):
-    settings = get_settings()
     system = (
         "You are ReplaysAI's in-app sports assistant. Help the user understand games, "
         "personalization, reels, fantasy rosters, predictions, and leaderboard strategy. "
@@ -88,31 +128,8 @@ def chat(body: ChatBody, user: AuthUser = Depends(get_current_user)):
     app_context = f"{_user_context(user, body)}\nCurrent route/context: {body.context or 'none'}"
     conversation = _conversation(body)
 
-    if settings.openai_api_key:
-        from openai import OpenAI
-
-        client = OpenAI(api_key=settings.openai_api_key)
-        response = client.chat.completions.create(
-            model=settings.openai_model,
-            max_tokens=450,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": app_context},
-                *conversation,
-            ],
-        )
-        return {"reply": (response.choices[0].message.content or "").strip()}
-
-    if settings.anthropic_api_key:
-        import anthropic
-
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-        response = client.messages.create(
-            model=settings.anthropic_model,
-            max_tokens=450,
-            system=f"{system}\n\n{app_context}",
-            messages=conversation,
-        )
-        return {"reply": response.content[0].text.strip()}
-
-    return {"reply": _local_reply(body, user)}
+    result = _llm_reply(system, app_context, conversation)
+    if result is not None:
+        reply, source = result
+        return {"reply": reply, "source": source}
+    return {"reply": _local_reply(body, user), "source": "fallback"}

@@ -394,6 +394,27 @@ def extract_summary_highlights(summary: dict, sport: str) -> list[dict]:
     return highlights[:16]
 
 
+def extract_summary_leaders(summary: dict) -> list[dict]:
+    """Top statistical performers per team from a game summary."""
+    rows = []
+    for team_block in summary.get("leaders") or []:
+        team = ((team_block.get("team") or {}).get("abbreviation")
+                or (team_block.get("team") or {}).get("displayName") or "")
+        for category in team_block.get("leaders") or []:
+            label = category.get("displayName") or category.get("name") or ""
+            for leader in (category.get("leaders") or [])[:1]:
+                athlete = (leader.get("athlete") or {}).get("displayName")
+                value = leader.get("displayValue")
+                if athlete and value:
+                    rows.append({
+                        "team": team,
+                        "category": label,
+                        "player": athlete,
+                        "stat_line": value,
+                    })
+    return rows
+
+
 def extract_summary_videos(summary: dict) -> list[dict]:
     """Real highlight video clips (MP4 on ESPN's CDN) attached to a game summary."""
     clips = []

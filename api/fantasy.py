@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from api.espn_public import fetch_espn_athletes
-from middleware.clerk_auth import AuthUser, get_current_user
+from middleware.clerk_auth import AuthUser, get_current_user, get_optional_user
 
 router = APIRouter(prefix="/api/rosters", tags=["fantasy"])
 
@@ -18,8 +18,10 @@ def _current_week_label() -> str:
     return f"{now.isocalendar()[0]}-W{now.isocalendar()[1]:02d}"
 
 
+# Rosters are stored client-side; reads tolerate missing/failed auth so the
+# Roster tab never blanks out.
 @router.get("")
-def list_rosters(_user: AuthUser = Depends(get_current_user)):
+def list_rosters(_user: Optional[AuthUser] = Depends(get_optional_user)):
     return []
 
 

@@ -4,7 +4,8 @@ from functools import lru_cache
 
 class Settings(BaseSettings):
     anthropic_api_key: str = ""
-    anthropic_model: str = "claude-3-5-sonnet-latest"
+    # claude-3-5-sonnet-latest was retired in Oct 2025 and now 404s.
+    anthropic_model: str = "claude-opus-4-8"
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
     youtube_api_key: str = ""

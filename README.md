@@ -369,7 +369,7 @@ Backend (`.env`):
 | `OPENAI_API_KEY` | For AI features | OpenAI API key |
 | `OPENAI_MODEL` | Optional | Defaults to `gpt-4o-mini` |
 | `ANTHROPIC_API_KEY` | For AI features | Anthropic API key if OpenAI is not set |
-| `ANTHROPIC_MODEL` | Optional | Defaults to `claude-3-5-sonnet-latest` |
+| `ANTHROPIC_MODEL` | Optional | Defaults to `claude-opus-4-8` |
 | `REDIS_URL` | Optional | Redis connection string |
 | `YOUTUBE_API_KEY` | Optional | YouTube Data API v3 key |
 | `ALLOWED_ORIGINS` | Yes in production | Comma-separated allowed frontend origins |

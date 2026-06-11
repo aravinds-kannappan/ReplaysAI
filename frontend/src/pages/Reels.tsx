@@ -1,25 +1,16 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
-import Hls from "hls.js";
 import { useGames } from "../hooks/useGames";
 import { useFeed } from "../hooks/usePredictions";
 import { getLocalFavoriteTeams } from "../hooks/useUser";
 import ScoreCard from "../components/ScoreCard";
+import ReelPlayer, { type Clip, type Playlist } from "../components/ReelPlayer";
 import { apiPath } from "../lib/api";
 import type { Game } from "../types";
 
 type League = "NBA" | "NFL";
-
-type Clip = {
-  id: string;
-  headline: string;
-  description: string;
-  duration: number;
-  url: string;
-  thumbnail: string;
-};
 
 type Cut = {
   label: string;
@@ -30,71 +21,10 @@ type Cut = {
   segments: { description: string; clock: string; period: number; play_type: string }[];
 };
 
-type Playlist = { label: string; clips: Clip[] };
-
 const CV_TAGS = {
   NBA: ["Dunk", "Three", "Block", "Assist", "Clutch run", "Transition"],
   NFL: ["Touchdown", "Sack", "Interception", "Explosive pass", "Red zone", "Two-minute"],
 };
-
-function ClipVideo({ clip, onEnded }: { clip: Clip; onEnded: () => void }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    const isHlsUrl = clip.url.includes(".m3u8");
-    if (isHlsUrl && !video.canPlayType("application/vnd.apple.mpegurl") && Hls.isSupported()) {
-      const hls = new Hls();
-      hls.loadSource(clip.url);
-      hls.attachMedia(video);
-      return () => hls.destroy();
-    }
-    video.src = clip.url; // Safari plays HLS natively; MP4s play everywhere
-  }, [clip.url]);
-
-  return (
-    <video
-      ref={videoRef}
-      poster={clip.thumbnail || undefined}
-      controls
-      autoPlay
-      playsInline
-      onEnded={onEnded}
-    />
-  );
-}
-
-function ReelPlayer({ playlist, onClose }: { playlist: Playlist; onClose: () => void }) {
-  const [index, setIndex] = useState(0);
-  const clip = playlist.clips[index];
-  const totalSeconds = playlist.clips.reduce((sum, item) => sum + (item.duration || 0), 0);
-  if (!clip) return null;
-
-  return (
-    <div className="reel-player">
-      <div className="reel-player-head">
-        <div>
-          <strong>{playlist.label}</strong>
-          <span>Clip {index + 1} of {playlist.clips.length} · ~{Math.max(1, Math.round(totalSeconds / 60))} min total</span>
-        </div>
-        <button className="btn-ghost" onClick={onClose}>Close</button>
-      </div>
-      <ClipVideo
-        key={clip.url}
-        clip={clip}
-        onEnded={() => setIndex((i) => Math.min(i + 1, playlist.clips.length - 1))}
-      />
-      <div className="reel-player-meta">
-        <strong>{clip.headline}</strong>
-        <div className="reel-player-nav">
-          <button className="btn-ghost" disabled={index === 0} onClick={() => setIndex(index - 1)}>Prev</button>
-          <button className="btn-ghost" disabled={index === playlist.clips.length - 1} onClick={() => setIndex(index + 1)}>Next</button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function ReelAgentChat({ gameId, onReel }: { gameId: number; onReel: (playlist: Playlist) => void }) {
   const [draft, setDraft] = useState("");
@@ -102,7 +32,7 @@ function ReelAgentChat({ gameId, onReel }: { gameId: number; onReel: (playlist: 
   const [log, setLog] = useState<{ role: "user" | "assistant"; text: string }[]>([
     {
       role: "assistant",
-      text: 'Tell me the reel you want from this game — e.g. "2 minute reel of Wembanyama plays" or "all Knicks baskets in about 3 minutes".',
+      text: "What kind of reel do you want from this game? Tell me who or what to feature and how long it should be — or just say \"surprise me\".",
     },
   ]);
 
@@ -111,13 +41,21 @@ function ReelAgentChat({ gameId, onReel }: { gameId: number; onReel: (playlist: 
     const prompt = draft.trim();
     if (!prompt || loading) return;
     setDraft("");
-    setLog((prev) => [...prev, { role: "user", text: prompt }]);
+    const history = [...log, { role: "user" as const, text: prompt }];
+    setLog(history);
     setLoading(true);
     try {
-      const res = await axios.post(apiPath(`/api/games/${gameId}/reels/generate`), { prompt });
-      const { label, clips, note, estimated_seconds } = res.data as Playlist & { note: string; estimated_seconds: number };
-      setLog((prev) => [...prev, { role: "assistant", text: `${note} Playing ${clips.length} clips (~${estimated_seconds}s).` }]);
-      if (clips?.length) onReel({ label: label || prompt, clips });
+      const res = await axios.post(apiPath(`/api/games/${gameId}/reels/generate`), {
+        prompt,
+        messages: history,
+      });
+      if (res.data.action === "ask") {
+        setLog((prev) => [...prev, { role: "assistant", text: res.data.question }]);
+      } else {
+        const { label, clips, note, estimated_seconds } = res.data as Playlist & { note: string; estimated_seconds: number };
+        setLog((prev) => [...prev, { role: "assistant", text: `${note} Playing ${clips.length} clips (~${estimated_seconds}s).` }]);
+        if (clips?.length) onReel({ label: label || prompt, clips });
+      }
     } catch {
       setLog((prev) => [...prev, {
         role: "assistant",
@@ -139,9 +77,9 @@ function ReelAgentChat({ gameId, onReel }: { gameId: number; onReel: (playlist: 
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="Describe the reel you want from this game..."
+          placeholder="e.g. 2 minute reel of Wembanyama plays..."
         />
-        <button type="submit" disabled={loading}>{loading ? "..." : "Generate"}</button>
+        <button type="submit" disabled={loading}>{loading ? "..." : "Send"}</button>
       </form>
     </div>
   );
@@ -243,7 +181,6 @@ export default function Reels() {
               <span>Generated reel cuts</span>
               <h2>{featuredGame ? `${featuredTitle} — 2, 5, and 10 minute reels` : "Choose a game source"}</h2>
             </div>
-            {reelData?.video_url && <a href={reelData.video_url} target="_blank" rel="noreferrer">Open source</a>}
           </div>
 
           {playlist && <ReelPlayer playlist={playlist} onClose={() => setPlaylist(null)} />}

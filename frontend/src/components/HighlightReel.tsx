@@ -1,71 +1,63 @@
-import { memo } from "react";
-import { useHighlights } from "../hooks/useGames";
+import { memo, useState } from "react";
+import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import axios from "axios";
+import ReelPlayer, { type Clip, type Playlist } from "./ReelPlayer";
+import { apiPath } from "../lib/api";
 
 interface Props {
   gameId: number;
 }
 
-const PLAY_EMOJI: Record<string, string> = {
-  dunk: "🏀",
-  three_pointer: "🎯",
-  block: "✋",
-  steal: "💨",
-  touchdown: "🏈",
-  interception: "🔄",
-  field_goal: "🎯",
-  sack: "💥",
-  other: "▶️",
-  crowd_reaction: "📣",
+type Cut = {
+  label: string;
+  estimated_seconds: number;
+  status: string;
+  clips: Clip[];
 };
 
-function getYouTubeEmbedUrl(url: string | null): string | null {
-  if (!url) return null;
-  const match = url.match(/[?&]v=([^&]+)/);
-  if (match) return `https://www.youtube.com/embed/${match[1]}`;
-  return null;
-}
-
 function HighlightReel({ gameId }: Props) {
-  const { data, isLoading } = useHighlights(gameId);
+  const [playlist, setPlaylist] = useState<Playlist | null>(null);
+  const { data, isLoading } = useQuery({
+    queryKey: ["reel-cuts", gameId],
+    queryFn: () => axios.get(apiPath(`/api/games/${gameId}/reels`)).then((r) => r.data),
+    staleTime: 300_000,
+  });
 
-  if (isLoading) return <div className="highlight-placeholder">Loading highlights...</div>;
+  if (isLoading) return <div className="highlight-placeholder">Loading highlight clips...</div>;
   if (!data) return null;
 
-  const embedUrl = getYouTubeEmbedUrl(data.video_url);
-  const topClips = data.classifications.filter((c) => c.confidence > 0.6 && c.play_type !== "other").slice(0, 12);
+  const cuts: Cut[] = data.cuts ?? [];
+  const playableCuts = cuts.filter((cut) => cut.clips?.length);
 
   return (
     <div className="highlight-reel">
-      {embedUrl ? (
-        <div className="video-embed">
-          <iframe
-            src={embedUrl}
-            title="Game Highlights"
-            allowFullScreen
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          />
-        </div>
-      ) : data.video_url ? (
-        <a href={data.video_url} target="_blank" rel="noopener noreferrer" className="video-search-link">
-          Search for highlights on YouTube →
-        </a>
-      ) : null}
+      {playlist && <ReelPlayer playlist={playlist} onClose={() => setPlaylist(null)} />}
 
-      {topClips.length > 0 && (
-        <div className="cv-timeline">
-          <h4>CV-Detected Plays</h4>
-          <div className="timeline-items">
-            {topClips.map((c, i) => (
-              <div key={i} className="timeline-item">
-                <span className="play-emoji">{PLAY_EMOJI[c.play_type] ?? "▶️"}</span>
-                <span className="play-label">{c.play_type.replace(/_/g, " ")}</span>
-                <span className="play-ts">{Math.floor(c.timestamp / 60)}:{String(Math.floor(c.timestamp % 60)).padStart(2, "0")}</span>
-                <span className="play-conf">{Math.round(c.confidence * 100)}%</span>
+      {playableCuts.length > 0 ? (
+        <div className="summary-list">
+          {playableCuts.map((cut) => (
+            <div key={cut.label} className="summary-row reel-cut-row">
+              <div>
+                <strong>{cut.label} · {cut.clips.length} clips · {cut.estimated_seconds}s of video</strong>
+                <span>{cut.clips.slice(0, 2).map((clip) => clip.headline).join(" | ")}</span>
               </div>
-            ))}
-          </div>
+              <button
+                className="btn-primary reel-play-btn"
+                onClick={() => setPlaylist({ label: cut.label, clips: cut.clips })}
+              >
+                ▶ Play reel
+              </button>
+            </div>
+          ))}
         </div>
+      ) : (
+        <p className="empty-state">
+          ESPN has not published video clips for this game yet. Clips usually appear shortly after tip-off.
+        </p>
       )}
+
+      <Link to="/reels" className="btn-ghost">Open the reel studio for custom cuts →</Link>
     </div>
   );
 }

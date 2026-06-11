@@ -1,8 +1,9 @@
 import json
 import re
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from api.espn_public import (
     extract_summary_highlights,
@@ -12,7 +13,6 @@ from api.espn_public import (
     fetch_espn_summary_by_id,
 )
 from config import get_settings
-from video.youtube_search import search_highlight_video
 
 router = APIRouter(prefix="/api/games", tags=["reels"])
 
@@ -27,13 +27,6 @@ def _resolve_game(game_id: int) -> tuple[str, dict, dict]:
     sport, game_data = resolved_game
     _, summary = resolved_summary
     return sport, game_data, summary
-
-
-def _video_url_for_game(game: dict) -> str | None:
-    home = game["home_team"].get("name") or "home"
-    away = game["away_team"].get("name") or "away"
-    game_date = (game.get("game_date") or "")[:10]
-    return search_highlight_video(home, away, game_date, game.get("sport") or "NBA")
 
 
 def _segment_weight(play_type: str) -> int:
@@ -129,7 +122,6 @@ def get_reel_cuts(game_id: int):
     segments = _build_segments(plays, highlights)
     return {
         "game_id": game_id,
-        "video_url": _video_url_for_game(game_data),
         "clip_count": len(clips),
         "cuts": _cuts_from_sources(clips, segments),
         "rendering": {
@@ -144,9 +136,15 @@ def get_reel_cuts(game_id: int):
     }
 
 
+class ReelTurn(BaseModel):
+    role: Literal["user", "assistant"]
+    text: str
+
+
 class ReelRequest(BaseModel):
     prompt: str
     max_seconds: int | None = None
+    messages: list[ReelTurn] = Field(default_factory=list)
 
 
 _STOPWORDS = {
@@ -205,9 +203,25 @@ def _select_clips_keywords(prompt: str, clips: list[dict], budget: int) -> tuple
     return selected, note
 
 
-def _select_clips_llm(prompt: str, clips: list[dict], budget: int) -> tuple[list[dict], str] | None:
+def _agent_turns(body: ReelRequest) -> list[dict[str, str]]:
+    turns = [
+        {"role": turn.role, "content": turn.text}
+        for turn in body.messages[-10:]
+        if turn.text.strip()
+    ]
+    if not turns or turns[-1]["role"] != "user" or turns[-1]["content"] != body.prompt:
+        turns.append({"role": "user", "content": body.prompt})
+    return turns
+
+
+def _reel_agent_llm(body: ReelRequest, clips: list[dict], budget: int) -> dict | None:
+    """Conversational director: either asks ONE clarifying question or returns a reel.
+
+    Returns {"action": "ask", "question"} or {"action": "reel", "clips", "note", "label"},
+    or None when no provider is configured / the call fails (caller falls back to keywords).
+    """
     settings = get_settings()
-    if not settings.openai_api_key and not settings.anthropic_api_key:
+    if not settings.anthropic_api_key and not settings.openai_api_key:
         return None
 
     catalog = "\n".join(
@@ -215,47 +229,79 @@ def _select_clips_llm(prompt: str, clips: list[dict], budget: int) -> tuple[list
         for clip in clips
     )
     system = (
-        "You curate sports highlight reels from a fixed clip catalog. "
-        "Pick the clips that best match the fan's request, in the order they should play, "
-        f"keeping total duration near {budget} seconds. Respond with ONLY JSON: "
-        '{"clip_ids": ["id", ...], "note": "one sentence telling the fan what the reel covers"}'
+        "You are ReplaysAI's reel director. You build highlight reels for a fan from a fixed "
+        "catalog of real clips from one game.\n"
+        "Decide between two actions each turn:\n"
+        "1. If the fan's request is ambiguous about WHAT to feature (player, team, type of "
+        "moments) or HOW LONG the reel should be, and the conversation has not already "
+        "answered it, ask exactly ONE short, friendly clarifying question (offer concrete "
+        "options like 2, 5, or 10 minutes).\n"
+        "2. Otherwise build the reel: pick matching clips in the order they should play, "
+        f"keeping total duration near {budget} seconds (the fan's duration words override this).\n"
+        "Never ask more than one question total per conversation — if you already asked, build "
+        "the best reel you can with what you know.\n"
+        "Respond with ONLY JSON, one of:\n"
+        '{"action": "ask", "question": "..."}\n'
+        '{"action": "generate", "clip_ids": ["id", ...], "label": "short reel title", '
+        '"note": "one sentence telling the fan what the reel covers"}\n'
+        f"\nClip catalog:\n{catalog}"
     )
-    user = f"Fan request: {prompt}\n\nClip catalog:\n{catalog}"
 
     try:
-        if settings.openai_api_key:
-            from openai import OpenAI
-
-            response = OpenAI(api_key=settings.openai_api_key).chat.completions.create(
-                model=settings.openai_model,
-                max_tokens=400,
-                messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
-            )
-            raw = response.choices[0].message.content or ""
-        else:
+        if settings.anthropic_api_key:
             import anthropic
 
             response = anthropic.Anthropic(api_key=settings.anthropic_api_key).messages.create(
                 model=settings.anthropic_model,
-                max_tokens=400,
+                max_tokens=500,
                 system=system,
-                messages=[{"role": "user", "content": user}],
+                messages=_agent_turns(body),
             )
             raw = response.content[0].text
+        else:
+            from openai import OpenAI
+
+            response = OpenAI(api_key=settings.openai_api_key).chat.completions.create(
+                model=settings.openai_model,
+                max_tokens=500,
+                messages=[{"role": "system", "content": system}, *_agent_turns(body)],
+            )
+            raw = response.choices[0].message.content or ""
 
         match = re.search(r"\{.*\}", raw, re.DOTALL)
         if not match:
             return None
         parsed = json.loads(match.group(0))
+
+        if parsed.get("action") == "ask" and parsed.get("question"):
+            return {"action": "ask", "question": str(parsed["question"])}
+
         by_id = {clip["id"]: clip for clip in clips}
         ordered = [by_id[str(clip_id)] for clip_id in parsed.get("clip_ids", []) if str(clip_id) in by_id]
         if not ordered:
             return None
         selected, _ = _fill_budget(ordered, budget)
-        note = str(parsed.get("note") or "Here is the reel you asked for.")
-        return selected, note
-    except Exception:
+        return {
+            "action": "reel",
+            "clips": selected,
+            "label": str(parsed.get("label") or f"Custom reel — {body.prompt[:60]}"),
+            "note": str(parsed.get("note") or "Here is the reel you asked for."),
+        }
+    except Exception as exc:
+        print(f"[reels] LLM agent failed ({settings.anthropic_model}): {exc}")
         return None
+
+
+def _is_vague(body: ReelRequest, budget_hint: int | None) -> bool:
+    tokens = [
+        token for token in re.findall(r"[a-z0-9']+", body.prompt.lower())
+        if len(token) > 2 and token not in _STOPWORDS
+    ]
+    return not tokens and budget_hint is None
+
+
+def _already_asked(body: ReelRequest) -> bool:
+    return any(turn.role == "assistant" for turn in body.messages)
 
 
 @router.post("/{game_id}/reels/generate")
@@ -268,20 +314,41 @@ def generate_reel(game_id: int, body: ReelRequest):
             detail="ESPN has not published video clips for this game yet, so a custom reel cannot be built.",
         )
 
-    budget = body.max_seconds or _budget_from_prompt(body.prompt) or 300
-    result = _select_clips_llm(body.prompt, clips, budget)
+    budget_hint = body.max_seconds or _budget_from_prompt(body.prompt)
+    budget = budget_hint or 300
+
+    result = _reel_agent_llm(body, clips, budget)
     source = "llm"
     if result is None:
-        result = _select_clips_keywords(body.prompt, clips, budget)
+        # Keyword fallback keeps the same ask-then-generate shape.
+        if _is_vague(body, budget_hint) and not _already_asked(body):
+            result = {
+                "action": "ask",
+                "question": (
+                    "What should this reel focus on — a specific player, one team's plays, or the "
+                    "game-defining moments? And how long do you want it: 2, 5, or 10 minutes?"
+                ),
+            }
+        else:
+            selected, note = _select_clips_keywords(body.prompt, clips, budget)
+            result = {
+                "action": "reel",
+                "clips": selected,
+                "label": f"Custom reel — {body.prompt[:60]}",
+                "note": note,
+            }
         source = "keyword"
-    selected, note = result
+
+    if result["action"] == "ask":
+        return {"game_id": game_id, "action": "ask", "question": result["question"], "source": source}
 
     return {
         "game_id": game_id,
+        "action": "reel",
         "prompt": body.prompt,
-        "label": f"Custom reel — {body.prompt[:60]}",
-        "clips": selected,
-        "estimated_seconds": sum(clip.get("duration") or 30 for clip in selected),
-        "note": note,
+        "label": result["label"],
+        "clips": result["clips"],
+        "estimated_seconds": sum(clip.get("duration") or 30 for clip in result["clips"]),
+        "note": result["note"],
         "source": source,
     }

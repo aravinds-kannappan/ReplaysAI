@@ -1,4 +1,5 @@
 import { useState } from "react";
+import ReactMarkdown from "react-markdown";
 import { useParams, Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@clerk/clerk-react";
@@ -32,21 +33,35 @@ export default function GameDetail() {
   const createPrediction = useCreatePrediction();
   const [picked, setPicked] = useState<number | null>(null);
 
+  // Which of the user's favorite teams is playing in this game — the fan recap
+  // is written from that team's perspective.
+  const favTeams = (user?.favorite_teams ?? []) as { id: number; sport: string; abbreviation: string | null }[];
+  const fanTeamAbbr = game
+    ? favTeams.find((t) =>
+        t.sport === game.sport &&
+        (t.abbreviation === game.home_team.abbreviation || t.abbreviation === game.away_team.abbreviation),
+      )?.abbreviation ?? null
+    : null;
+
   const { data: fanRecap } = useQuery({
-    queryKey: ["fan-recap", gameId],
-    queryFn: () => authFetch(getToken, `/api/games/${gameId}/fan-recap`),
+    queryKey: ["fan-recap", gameId, fanTeamAbbr],
+    queryFn: () =>
+      authFetch(getToken, `/api/games/${gameId}/fan-recap`, { params: fanTeamAbbr ? { team: fanTeamAbbr } : {} }),
     enabled: tab === "fan",
   });
 
   async function generateFanRecap() {
     setFanGenerating(true);
     try {
-      await authFetch(getToken, `/api/games/${gameId}/fan-recap/generate`, { method: "post" });
+      await authFetch(getToken, `/api/games/${gameId}/fan-recap/generate`, {
+        method: "post",
+        params: fanTeamAbbr ? { team: fanTeamAbbr } : {},
+      });
       let attempts = 0;
       const poll = setInterval(async () => {
         attempts++;
-        await qc.invalidateQueries({ queryKey: ["fan-recap", gameId] });
-        const data = qc.getQueryData<{ content: string | null }>(["fan-recap", gameId]);
+        await qc.invalidateQueries({ queryKey: ["fan-recap", gameId, fanTeamAbbr] });
+        const data = qc.getQueryData<{ content: string | null }>(["fan-recap", gameId, fanTeamAbbr]);
         if (data?.content || attempts > 24) {
           clearInterval(poll);
           setFanGenerating(false);
@@ -148,7 +163,7 @@ export default function GameDetail() {
             {fanRecap?.content ? (
               <div className="recap-content fan-recap-content">
                 <div className="fan-badge">🏀 Your Team's Perspective</div>
-                <p style={{ whiteSpace: "pre-wrap" }}>{fanRecap.content}</p>
+                <ReactMarkdown>{fanRecap.content}</ReactMarkdown>
               </div>
             ) : (
               <div className="recap-placeholder">
