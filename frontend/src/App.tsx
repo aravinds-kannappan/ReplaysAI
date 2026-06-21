@@ -1,18 +1,14 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { SignIn, SignUp } from "@clerk/clerk-react";
 import Navbar from "./components/Navbar";
 import FloatingAssistant from "./components/FloatingAssistant";
-import ProtectedRoute from "./components/ProtectedRoute";
 import Landing from "./pages/Landing";
 import Onboarding from "./pages/Onboarding";
 import Feed from "./pages/Feed";
-import Reels from "./pages/Reels";
+import DreamTeam from "./pages/DreamTeam";
+import ReelStudio from "./pages/ReelStudio";
 import GameDetail from "./pages/GameDetail";
 import PlayerProfile from "./pages/PlayerProfile";
-import Predictions from "./pages/Predictions";
-import Leaderboard from "./pages/Leaderboard";
-import RosterBuilder from "./pages/RosterBuilder";
 import Profile from "./pages/Profile";
 import "./App.css";
 
@@ -26,21 +22,30 @@ export default function App() {
       <BrowserRouter>
         <Navbar />
         <Routes>
-          {/* Public */}
           <Route path="/" element={<Landing />} />
-          <Route path="/sign-in/*" element={<div className="auth-page"><SignIn routing="path" path="/sign-in" /></div>} />
-          <Route path="/sign-up/*" element={<div className="auth-page"><SignUp routing="path" path="/sign-up" /></div>} />
+          {/* The demo is the team + player picker; no login required. */}
+          <Route path="/demo" element={<Onboarding />} />
+          <Route path="/onboarding" element={<Onboarding />} />
 
-          {/* Auth-gated */}
-          <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
-          <Route path="/feed" element={<ProtectedRoute><Feed /></ProtectedRoute>} />
-          <Route path="/reels" element={<ProtectedRoute><Reels /></ProtectedRoute>} />
-          <Route path="/game/:id" element={<ProtectedRoute><GameDetail /></ProtectedRoute>} />
-          <Route path="/player/:id" element={<ProtectedRoute><PlayerProfile /></ProtectedRoute>} />
-          <Route path="/predictions" element={<ProtectedRoute><Predictions /></ProtectedRoute>} />
-          <Route path="/leaderboard" element={<ProtectedRoute><Leaderboard /></ProtectedRoute>} />
-          <Route path="/roster" element={<ProtectedRoute><RosterBuilder /></ProtectedRoute>} />
-          <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+          {/* One dashboard — every tab routes here and reads the tab from the path. */}
+          <Route path="/feed" element={<Feed />} />
+          <Route path="/dashboard" element={<Feed />} />
+          <Route path="/season" element={<Feed />} />
+          <Route path="/games" element={<Feed />} />
+          <Route path="/reels" element={<Feed />} />
+          <Route path="/extras" element={<Feed />} />
+          <Route path="/picks" element={<Feed />} />
+          <Route path="/predictions" element={<Feed />} />
+          <Route path="/roster" element={<Feed />} />
+          <Route path="/leaderboard" element={<Feed />} />
+
+          {/* Dedicated heavy surfaces (hybrid routing). */}
+          <Route path="/dream-team" element={<DreamTeam />} />
+          <Route path="/reel/:gameId" element={<ReelStudio />} />
+
+          <Route path="/game/:id" element={<GameDetail />} />
+          <Route path="/player/:id" element={<PlayerProfile />} />
+          <Route path="/profile" element={<Profile />} />
         </Routes>
         <FloatingAssistant />
       </BrowserRouter>

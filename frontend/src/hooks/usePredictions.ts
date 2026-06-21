@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useAuth } from "@clerk/clerk-react";
+import { useAuth } from "../lib/auth";
 import axios from "axios";
 import { apiPath } from "../lib/api";
 import { getLocalFavoriteTeams } from "./useUser";
@@ -85,7 +85,7 @@ export function useFeed() {
   const favoriteKeys = favoriteTeams.map((team) => `${team.sport}:${team.abbreviation}`).join(",");
   return useQuery({
     queryKey: ["feed", favoriteKeys],
-    queryFn: () => authFetch(getToken, "/api/feed", { params: favoriteKeys ? { favorite_teams: favoriteKeys } : {} }),
+    queryFn: () => authFetch(getToken, "/api/feed", { params: { limit: 80, ...(favoriteKeys ? { favorite_teams: favoriteKeys } : {}) } }),
     refetchInterval: 30_000,
   });
 }
@@ -111,6 +111,49 @@ export function useRosters() {
   return useQuery({
     queryKey: ["rosters"],
     queryFn: () => readLocal<Record<string, unknown>[]>(ROSTERS_KEY, []),
+  });
+}
+
+export type NewsArticle = {
+  id: string;
+  headline: string;
+  description: string;
+  published: string | null;
+  sport: string;
+  image: string | null;
+  link: string | null;
+  type: string;
+};
+
+export function useNews(sport: string, keywords: string[]) {
+  const kw = keywords.join(",");
+  return useQuery<NewsArticle[]>({
+    queryKey: ["news", sport, kw],
+    queryFn: () => axios.get(apiPath("/api/news"), { params: { sport, keywords: kw } }).then((r) => r.data),
+    enabled: keywords.length > 0,
+    staleTime: 300_000,
+  });
+}
+
+export type Standing = { team_id: number; name: string; abbreviation: string; wins: number; losses: number; win_pct: number };
+
+export function useRankings(sport: string) {
+  return useQuery<Record<string, Standing[]>>({
+    queryKey: ["rankings", sport],
+    queryFn: () => axios.get(apiPath("/api/rankings"), { params: { sport } }).then((r) => r.data),
+    staleTime: 300_000,
+  });
+}
+
+export type PlayerStat = { id: number; name: string; team?: string | null; line: { label: string; value: number }[] };
+
+export function usePlayerStats(sport: string, ids: number[]) {
+  const key = ids.slice().sort().join(",");
+  return useQuery<Record<string, PlayerStat>>({
+    queryKey: ["player-stats", sport, key],
+    queryFn: () => axios.get(apiPath("/api/players/stats"), { params: { sport, ids: key } }).then((r) => r.data),
+    enabled: ids.length > 0,
+    staleTime: 600_000,
   });
 }
 

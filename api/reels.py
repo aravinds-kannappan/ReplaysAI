@@ -1,11 +1,16 @@
-"""Agent-generated story reels.
+"""Real-video story reels.
 
-A reel here is not trimmed broadcast footage — it is a screenplay the agent
-builds from structured game data (play-by-play, period scores, scoring runs,
-lead changes, statistical leaders): a timed sequence of scenes with narration
-explaining why each moment mattered. The frontend renders it as an animated
-story. Depth scales with requested length: ~30s is the emotional punchline,
-2 minutes is a structured narrative, 5-10 minutes approaches a mini-documentary.
+A reel here is real ESPN highlight footage (HLS/MP4 clips) curated by the agent,
+not trimmed-from-the-start broadcast and not a text screenplay. The tiers
+summarize the ENTIRE game at increasing depth:
+
+- 2 min  -> a quick rundown: a handful of clips spread across the whole game
+- 5 min  -> a fuller recap: more clips, still spanning the whole game
+- 10 min -> the meticulous cut: most/all clips
+
+A conversational director also builds a focused reel on request — "only Q4",
+"every foul", "Wembanyama's takeover" — by selecting the matching clips and
+writing one-line narration per clip.
 """
 import json
 import re
@@ -17,47 +22,25 @@ from pydantic import BaseModel, Field
 from api.espn_public import (
     extract_summary_leaders,
     extract_summary_plays,
+    extract_summary_videos,
     fetch_espn_game_by_id,
+    fetch_espn_game_summary,
+    fetch_espn_games,
     fetch_espn_summary_by_id,
 )
-from api.recaps import _lead_changes, _period_label, _period_scores
+from api.recaps import _lead_changes, _period_scores, llm_text
 from config import get_settings
 
 router = APIRouter(prefix="/api/games", tags=["reels"])
 
-CUT_LENGTHS = [120, 300, 600]
-
-_PLAY_WEIGHTS = {
-    "touchdown": 10,
-    "dunk": 9,
-    "three_pointer": 8,
-    "interception": 8,
-    "sack": 7,
-    "block": 7,
-    "steal": 7,
-    "field_goal": 6,
-    "turnover": 6,
-    "assist": 5,
-    "shot": 4,
-}
-
-_PLAY_PHRASES = {
-    "dunk": "A statement at the rim",
-    "three_pointer": "From way downtown",
-    "block": "Rejected at the summit",
-    "steal": "Picked clean",
-    "shot": "A bucket when it counted",
-    "free_throw": "Points from the stripe",
-    "touchdown": "Six points on the board",
-    "interception": "Turned over at the worst time",
-    "sack": "The pocket collapses",
-    "field_goal": "Three points off the boot",
-    "turnover": "A costly giveaway",
-    "assist": "Vision finds the open man",
-}
+CUT_TIERS = [
+    ("2 min story", 120, "A quick rundown of the entire game."),
+    ("5 min story", 300, "A fuller recap across every quarter."),
+    ("10 min story", 600, "The meticulous, detailed cut."),
+]
 
 
-def _resolve_game(game_id: int) -> tuple[str, dict, dict]:
+def _resolve(game_id: int):
     resolved_game = fetch_espn_game_by_id(game_id)
     resolved_summary = fetch_espn_summary_by_id(game_id)
     if not resolved_game or not resolved_summary:
@@ -67,413 +50,373 @@ def _resolve_game(game_id: int) -> tuple[str, dict, dict]:
     return sport, game_data, summary
 
 
-def _biggest_run(plays: list[dict], away_abbr: str, home_abbr: str) -> dict | None:
-    """Longest stretch of unanswered points."""
-    best = None
-    run_side, run_points = None, 0
-    last_away = last_home = 0
-    for play in plays:
-        away, home = play.get("away_score"), play.get("home_score")
-        if away is None or home is None:
-            continue
-        delta_away, delta_home = away - last_away, home - last_home
-        last_away, last_home = away, home
-        if delta_away < 0 or delta_home < 0:
-            run_side, run_points = None, 0
-            continue
-        if delta_away > 0 and delta_home > 0:
-            run_side, run_points = None, 0
-            continue
-        side = "away" if delta_away > 0 else "home" if delta_home > 0 else None
-        if side is None:
-            continue
-        if side == run_side:
-            run_points += delta_away + delta_home
-        else:
-            run_side, run_points = side, delta_away + delta_home
-        if best is None or run_points > best["points"]:
-            best = {
-                "team": away_abbr if run_side == "away" else home_abbr,
-                "points": run_points,
-                "period": play.get("period"),
-                "score": {"away": away, "home": home},
-            }
-    return best if best and best["points"] >= 8 else None
+_HIGHLIGHT_KW = [
+    "dunk", "three", "3-point", "layup", "jumper", "basket", "bucket", "block", "steal",
+    "and-one", "alley", "poster", "buzzer", "clutch", "run", "go-ahead", "game-winner",
+    "overtime", "quarter", "half", "touchdown", " td", "field goal", "sack", "interception",
+    "fumble", "pass", "rush", "score", "highlight", "top play", "best play",
+]
+_POSTGAME_KW = [
+    "parade", "press conference", "interview", "reacts", "react", "celebrate", "celebration",
+    "trophy", "locker", "postgame", "post-game", "wholesome", "fans", "speech", "confetti",
+    "arrives", "red carpet", "champions", "championship parade", "ring", "offseason", "draft",
+]
 
 
-def _story_facts(sport: str, game: dict, summary: dict) -> dict:
-    plays = extract_summary_plays(summary, sport, limit=500)
-    for index, play in enumerate(plays):
-        play["ref"] = index
-        weight = _PLAY_WEIGHTS.get(play.get("play_type") or "other", 1)
-        if "miss" in (play.get("description") or "").lower():
-            weight = max(1, weight - 6)
-        play["weight"] = weight
-    away, home = game["away_team"], game["home_team"]
-    away_abbr = away.get("abbreviation") or "AWY"
-    home_abbr = home.get("abbreviation") or "HME"
+def _clip_score(c: dict) -> int:
+    text = f"{c.get('headline','')} {c.get('description','')}".lower()
+    s = 0
+    for k in _HIGHLIGHT_KW:
+        if k in text:
+            s += 2
+    for k in _POSTGAME_KW:
+        if k in text:
+            s -= 4
+    return s
+
+
+def _clips_for(summary: dict, sport: str) -> list[dict]:
+    clips = extract_summary_videos(summary)
+    for clip in clips:
+        if not clip.get("duration"):
+            clip["duration"] = 24
+        clip["_score"] = _clip_score(clip)
+    # Prefer in-game highlights; drop clearly post-game/parade clips when there are
+    # enough real highlights to fill a reel. Preserve original (broadcast) order.
+    highlights = [c for c in clips if c["_score"] > -2]
+    return highlights if len(highlights) >= 3 else clips
+
+
+def _spread(clips: list[dict], target_seconds: int) -> list[dict]:
+    """Evenly sample clips across the whole game so a short tier still spans the
+    full game rather than just the opening minutes."""
+    if not clips:
+        return []
+    avg = sum(c["duration"] for c in clips) / len(clips)
+    want = max(1, min(len(clips), round(target_seconds / max(avg, 8))))
+    if want >= len(clips):
+        return clips
+    step = len(clips) / want
+    idxs = sorted({min(len(clips) - 1, int(i * step)) for i in range(want)})
+    return [clips[i] for i in idxs]
+
+
+def _caption(clip: dict) -> str:
+    return clip.get("headline") or clip.get("description") or "Highlight"
+
+
+def _public_clip(clip: dict, narration: str | None = None) -> dict:
+    return {
+        "id": clip["id"],
+        "headline": clip.get("headline") or "",
+        "description": clip.get("description") or "",
+        "duration": clip.get("duration") or 24,
+        "url": clip["url"],
+        "thumbnail": clip.get("thumbnail") or "",
+        "narration": narration or _caption(clip),
+    }
+
+
+def _winner_side(facts: dict) -> tuple[dict, int]:
+    """Returns (winning team dict, win margin). Falls back to home on a tie/None."""
+    a, h = facts["away"], facts["home"]
+    as_, hs = facts.get("away_score") or 0, facts.get("home_score") or 0
+    return (h, hs - as_) if hs >= as_ else (a, as_ - hs)
+
+
+def _attach_overlays(public_clips: list[dict], facts: dict) -> list[dict]:
+    """Attach a typed overlay spec to each clip for the reel player to render as
+    React layers: a final scorebug, a rotating leader stat line, and an
+    illustrative win-probability read that drifts toward the winner across the
+    reel. The win-prob value is a model read, not a measured per-moment number."""
+    a, h = facts["away"], facts["home"]
+    leaders = facts.get("leaders") or []
+    winner, margin = _winner_side(facts)
+    total = max(1, len(public_clips))
+    # Final win-prob the model lands on, by how lopsided the game was.
+    final_wp = max(58, min(92, 60 + margin * 1.4 - facts.get("lead_changes", 0)))
+    scorebug = {
+        "type": "scorebug",
+        "away": {"abbr": a.get("abbreviation"), "score": facts.get("away_score")},
+        "home": {"abbr": h.get("abbreviation"), "score": facts.get("home_score")},
+    }
+    for i, clip in enumerate(public_clips):
+        overlays: list[dict] = [scorebug]
+        if leaders:
+            ldr = leaders[i % len(leaders)]
+            overlays.append({
+                "type": "statline",
+                "player": ldr.get("player"),
+                "team": ldr.get("team"),
+                "stat_line": ldr.get("stat_line"),
+                "category": ldr.get("category"),
+            })
+        wp = round(50 + (final_wp - 50) * ((i + 1) / total))
+        overlays.append({
+            "type": "winprob",
+            "team": winner.get("abbreviation"),
+            "value": wp,
+            "model": True,
+        })
+        clip["overlays"] = overlays
+    return public_clips
+
+
+def _facts(sport: str, game: dict, summary: dict) -> dict:
+    plays = extract_summary_plays(summary, sport, limit=400)
     return {
         "sport": sport,
-        "away": away.get("name") or "Away",
-        "home": home.get("name") or "Home",
-        "away_abbr": away_abbr,
-        "home_abbr": home_abbr,
-        "away_score": game.get("away_score"),
-        "home_score": game.get("home_score"),
+        "away": game["away_team"], "home": game["home_team"],
+        "away_score": game.get("away_score"), "home_score": game.get("home_score"),
         "date": (game.get("game_date") or "")[:10],
-        "status": game.get("status"),
-        "plays": plays,
         "periods": _period_scores(plays, sport),
         "lead_changes": _lead_changes(plays),
-        "run": _biggest_run(plays, away_abbr, home_abbr),
         "leaders": extract_summary_leaders(summary),
     }
 
 
-def _score_state(facts: dict, play: dict) -> str:
-    away, home = play.get("away_score"), play.get("home_score")
-    if away is None or home is None:
-        return ""
-    if away == home:
-        return f"{facts['away_abbr']} and {facts['home_abbr']} level at {away}"
-    leader = facts["away_abbr"] if away > home else facts["home_abbr"]
-    return f"{leader} up {max(away, home)}-{min(away, home)}"
+def _explainer(facts: dict, seconds: int) -> str:
+    """A NotebookLM-style spoken-explainer of the game, tiered by depth: 2 min is a
+    quick rundown, 5 a fuller recap, 10 a deep dive. LLM when configured, else a
+    grounded data-built walkthrough."""
+    a, h = facts["away"], facts["home"]
+    aa, ha = a.get("abbreviation"), h.get("abbreviation")
+    as_, hs = facts["away_score"], facts["home_score"]
+    leaders = facts["leaders"]
+    periods = facts["periods"]
+    lc = facts["lead_changes"]
+    leader_lines = "\n".join(f"{r['team']} — {r['player']}: {r['stat_line']} ({r['category']})" for r in leaders[:6])
+    period_line = "; ".join(f"{p['label']} {aa} {p['away']}-{p['home']} {ha}" for p in periods)
+    depth = "a punchy 2-minute rundown (8-10 sentences with the final score, turning point, and stars)" if seconds <= 120 else (
+        "a 5-minute recap (4 sections: opening context, how it unfolded, who decided it, what it means)" if seconds <= 300
+        else "a 10-minute deep dive (intro, quarter-by-quarter flow, tactical read, key performers, turning point, fan takeaway, and what to watch next)")
 
-
-def _moment_scene(facts: dict, play: dict, duration: int, narration: str | None = None) -> dict:
-    period = play.get("period") or 1
-    label = _period_label(facts["sport"], period)
-    if narration is None:
-        phrase = _PLAY_PHRASES.get(play.get("play_type") or "", "The moment lands")
-        state = _score_state(facts, play)
-        clock = play.get("clock") or ""
-        narration = f"{phrase} — {state}" + (f" with {clock} left in {label}." if clock else f" in {label}.")
-    return {
-        "type": "moment",
-        "duration": duration,
-        "heading": f"{label} · {play.get('clock') or ''}".strip(" ·"),
-        "text": play.get("description") or "",
-        "narration": narration,
-        "period": period,
-        "clock": play.get("clock"),
-        "score": {"away": play.get("away_score"), "home": play.get("home_score")},
-        "play_type": play.get("play_type") or "other",
-    }
-
-
-def _stat_scene(facts: dict, duration: int, narration: str | None = None) -> dict:
-    return {
-        "type": "stat",
-        "duration": duration,
-        "heading": "By the numbers",
-        "text": "Who carried it",
-        "narration": narration or "The box score tells you who decided this one.",
-        "stats": [
-            {"label": f"{row['player']} ({row['team']})", "value": f"{row['stat_line']} {row['category'].lower()}"}
-            for row in facts["leaders"][:6]
-        ],
-    }
-
-
-def _title_scene(facts: dict, focus: str, duration: int = 7) -> dict:
-    return {
-        "type": "title",
-        "duration": duration,
-        "heading": facts["date"],
-        "text": f"{facts['away']} @ {facts['home']}",
-        "narration": focus,
-        "score": {"away": None, "home": None},
-    }
-
-
-def _verdict_scene(facts: dict, duration: int = 9, narration: str | None = None) -> dict:
-    if facts["away_score"] is not None and facts["home_score"] is not None:
-        winner = facts["home"] if facts["home_score"] > facts["away_score"] else facts["away"]
-        margin = abs(facts["home_score"] - facts["away_score"])
-        text = f"Final: {facts['away_abbr']} {facts['away_score']} — {facts['home_abbr']} {facts['home_score']}"
-        default = (
-            f"{winner} by {margin}, in a game that flipped {facts['lead_changes']} "
-            f"time{'s' if facts['lead_changes'] != 1 else ''}. That's the story."
-        )
-    else:
-        text = f"{facts['away_abbr']} vs {facts['home_abbr']} — still being written"
-        default = "This one isn't over yet."
-    return {
-        "type": "verdict",
-        "duration": duration,
-        "heading": "Full time",
-        "text": text,
-        "narration": narration or default,
-        "score": {"away": facts["away_score"], "home": facts["home_score"]},
-    }
-
-
-def _build_story_data(facts: dict, duration: int, focus: str | None = None) -> dict:
-    """Deterministic screenplay straight from the data — used when no LLM is
-    configured (or the call fails) and for the instant pre-built cuts."""
-    n_scenes = max(4, min(48, round(duration / 9)))
-    scene_seconds = max(6, min(14, round(duration / n_scenes)))
-
-    scenes = [_title_scene(facts, focus or f"The story of {facts['away_abbr']} at {facts['home_abbr']}")]
-    reserved = 2  # title + verdict
-
-    if facts["leaders"]:
-        reserved += 1
-    include_breaks = duration >= 240 and facts["periods"]
-    if include_breaks:
-        reserved += min(3, len(facts["periods"]))
-    include_run = duration >= 120 and facts["run"] is not None
-    if include_run:
-        reserved += 1
-
-    moment_budget = max(2, n_scenes - reserved)
-    candidates = sorted(facts["plays"], key=lambda p: (-p["weight"], p["ref"]))[:moment_budget]
-    moments = sorted(candidates, key=lambda p: p["ref"])
-
-    breaks_at = {}
-    if include_breaks:
-        for snapshot in facts["periods"][:-1][:3]:
-            breaks_at[snapshot["label"]] = {
-                "type": "break",
-                "duration": scene_seconds,
-                "heading": f"End of {snapshot['label']}",
-                "text": f"{facts['away_abbr']} {snapshot['away']} — {facts['home_abbr']} {snapshot['home']}",
-                "narration": "The chapter closes; the chess match resets.",
-                "score": {"away": snapshot["away"], "home": snapshot["home"]},
-            }
-
-    seen_periods: set[int] = set()
-    for play in moments:
-        period = play.get("period") or 1
-        prev_label = _period_label(facts["sport"], period - 1) if period > 1 else None
-        if prev_label and prev_label in breaks_at and period not in seen_periods:
-            scenes.append(breaks_at.pop(prev_label))
-        seen_periods.add(period)
-        scenes.append(_moment_scene(facts, play, scene_seconds))
-
-    if include_run:
-        run = facts["run"]
-        scenes.append({
-            "type": "run",
-            "duration": scene_seconds,
-            "heading": f"{run['points']}-0 run",
-            "text": f"{run['team']} take over in {_period_label(facts['sport'], run['period'] or 1)}",
-            "narration": f"{run['points']} unanswered points — the stretch that bent the game.",
-            "score": run["score"],
-        })
-    if facts["leaders"]:
-        scenes.append(_stat_scene(facts, scene_seconds))
-    scenes.append(_verdict_scene(facts))
-
-    return {
-        "title": f"{facts['away_abbr']} @ {facts['home_abbr']} — {focus or 'the full story'}",
-        "focus": focus or "full_summary",
-        "duration_seconds": sum(scene["duration"] for scene in scenes),
-        "scene_count": len(scenes),
-        "scenes": scenes,
-        "generated_by": "data",
-    }
-
-
-def _scene_guidance(duration: int) -> str:
-    if duration <= 45:
-        return "4-6 scenes: title, the 2-3 punchline moments, verdict. Pure emotional arc."
-    if duration <= 150:
-        return ("10-14 scenes: title, key moments in story order, one run or break scene, "
-                "one stat scene, verdict. A structured narrative of the game.")
-    if duration <= 360:
-        return ("20-30 scenes: mini-documentary depth — chapter breaks per period, runs, "
-                "tactical context in narration, player spotlight via stat scenes, verdict.")
-    return ("34-46 scenes: full documentary treatment — possession-level beats, both teams' "
-            "perspectives, multiple stat scenes, every momentum swing narrated.")
-
-
-def _build_story_llm(body: "ReelRequest", facts: dict, duration: int) -> dict | None:
-    """Conversational director. Returns {"action": "ask", ...},
-    {"action": "story", ...} or None to fall back to the data builder."""
-    settings = get_settings()
-    if not settings.anthropic_api_key and not settings.openai_api_key:
-        return None
-
-    catalog_plays = sorted(facts["plays"], key=lambda p: (-p["weight"], p["ref"]))[:90]
-    catalog = "\n".join(
-        f"{p['ref']}: {_period_label(facts['sport'], p.get('period') or 1)} {p.get('clock') or ''} "
-        f"[{facts['away_abbr']} {p.get('away_score')}-{p.get('home_score')} {facts['home_abbr']}] "
-        f"({p.get('play_type')}) {p.get('description')}"
-        for p in sorted(catalog_plays, key=lambda p: p["ref"])
+    content = llm_text(
+        system=(
+            "You are ReplaysAI's game explainer — like a NotebookLM deep dive, but for one game. "
+            "Explain the game to a fan conversationally and clearly, grounded ONLY in the supplied "
+            "data (final score, period scores, lead changes, statistical leaders). Never invent "
+            "plays or numbers. Use Markdown with short headers. The depth must match the request."
+        ),
+        prompt=(
+            f"Game: {a.get('name')} {as_} at {h.get('name')} {hs} ({facts['date']}).\n"
+            f"Period scores: {period_line or 'n/a'}\nLead changes: {lc}\nLeaders:\n{leader_lines or 'n/a'}\n\n"
+            f"Write {depth} explaining the entire game."
+        ),
+        max_tokens=650 if seconds <= 120 else 1200 if seconds <= 300 else 2200,
     )
-    leaders = "\n".join(
-        f"{row['team']} — {row['player']}: {row['stat_line']} ({row['category']})" for row in facts["leaders"]
-    )
-    periods = "; ".join(
-        f"{p['label']} {facts['away_abbr']} {p['away']}-{p['home']} {facts['home_abbr']}" for p in facts["periods"]
-    )
-    run = facts["run"]
-    run_line = f"{run['team']} had {run['points']} unanswered in period {run['period']}" if run else "none detected"
+    if content:
+        return content
 
-    system = (
-        "You are ReplaysAI's reel director. You turn one game's structured data into a "
-        "short-form story reel: a timed sequence of scenes with narration, rendered as an "
-        "animated story (not video clips). You decide the storyline — comeback, star "
-        "takeover, defensive collapse, two-team duel, or full summary — from the data and "
-        "the fan's request.\n\n"
-        "Each turn, do ONE of:\n"
-        "1. If the request is ambiguous about focus or length and the conversation hasn't "
-        "already settled it, ask exactly ONE short clarifying question (offer 30 seconds, "
-        "2, 5, or 10 minutes). Never ask twice in one conversation.\n"
-        f"2. Otherwise output the screenplay. Target total duration: {duration} seconds. "
-        f"{_scene_guidance(duration)}\n\n"
-        "Scene rules:\n"
-        "- 'moment' scenes MUST carry a play_ref from the catalog; never invent plays, "
-        "scores, or stats. Narration explains WHY the moment mattered to the storyline.\n"
-        "- 'title' opens (text = matchup hook), 'verdict' closes (narration = the takeaway).\n"
-        "- 'break' marks a period/chapter transition; 'run' marks a momentum swing; 'stat' "
-        "shows numbers (use the leaders data; stats = [{label, value}]).\n"
-        "- duration is per-scene seconds (5-14). Narration: 1-2 punchy sentences, "
-        "documentary voice-over style.\n\n"
-        "Respond with ONLY JSON, one of:\n"
-        '{"action": "ask", "question": "..."}\n'
-        '{"action": "generate", "title": "...", "focus": "...", "scenes": [\n'
-        '  {"type": "title", "duration": 6, "text": "...", "heading": "...", "narration": "..."},\n'
-        '  {"type": "moment", "duration": 9, "play_ref": 12, "narration": "..."},\n'
-        '  {"type": "break"|"run", "duration": 7, "heading": "...", "text": "...", "narration": "..."},\n'
-        '  {"type": "stat", "duration": 8, "heading": "...", "narration": "...", "stats": [{"label": "...", "value": "..."}]},\n'
-        '  {"type": "verdict", "duration": 9, "text": "...", "narration": "..."}\n'
-        "]}\n\n"
-        f"GAME DATA\nMatchup: {facts['away']} ({facts['away_abbr']}) at {facts['home']} "
-        f"({facts['home_abbr']}), {facts['date']}\n"
-        f"Final: {facts['away_abbr']} {facts['away_score']} - {facts['home_abbr']} {facts['home_score']}\n"
-        f"Period scores: {periods}\nLead changes: {facts['lead_changes']}\nBiggest run: {run_line}\n"
-        f"Leaders:\n{leaders}\n\nPlay catalog:\n{catalog}"
-    )
-
-    turns = [
-        {"role": turn.role, "content": turn.text}
-        for turn in body.messages[-10:]
-        if turn.text.strip()
+    if as_ is None or hs is None:
+        return "Play-by-play for this game is still filling in."
+    winner, loser = (h, a) if hs > as_ else (a, h)
+    wsc, lsc = (hs, as_) if hs > as_ else (as_, hs)
+    period_text = " -> ".join(f"{p['label']}: {aa} {p['away']}-{p['home']} {ha}" for p in periods) or "Period flow is not published yet."
+    parts = [
+        "## Quick rundown",
+        f"{winner.get('name')} beat {loser.get('name')} **{wsc}-{lsc}**, a {abs(hs-as_)}-point game with "
+        f"**{lc} lead change{'s' if lc != 1 else ''}** — {'a true back-and-forth fight' if lc >= 4 else 'a steadier result'}.",
+        (
+            f"The score flow tells the shape of the game: {period_text}. The reel should open with the "
+            "headline clip, then move through the moments that show how the margin formed rather than "
+            "just stacking isolated highlights."
+        ),
     ]
-    if not turns or turns[-1]["role"] != "user" or turns[-1]["content"] != body.prompt:
-        turns.append({"role": "user", "content": body.prompt})
+    if leaders:
+        top = leaders[: 2 if seconds <= 120 else 4 if seconds <= 300 else 6]
+        parts.append("### Who decided it")
+        parts += [
+            f"- **{r['player']}** ({r['team']}) — {r['stat_line']} {r['category'].lower()}. "
+            "This is a primary narration anchor because the box-score line is part of the published summary."
+            for r in top
+        ]
+    if seconds >= 300 and periods:
+        parts.append("### How it flowed")
+        parts.append(
+            f"{period_text}. The 5-minute cut should spend less time on setup and more time on the "
+            "middle stretch: where the winner created separation, how the losing side responded, and "
+            "which star production kept the game from becoming noise."
+        )
+    if seconds >= 600:
+        parts.append("### The turning point")
+        parts.append(
+            f"One side seized control during the middle stretch, and {winner.get('name')} managed the "
+            f"margin the rest of the way to the {wsc}-{lsc} final. For a 10-minute deep cut, the Reel "
+            "Director should preserve every available high-value clip, then let the voice-over explain "
+            "why each one mattered to the outcome."
+        )
+        parts.append("### Fan takeaway")
+        parts.append(
+            f"For {winner.get('name')} fans, the story is control: finish the job, protect the lead, and "
+            f"let the top performers define the final. For {loser.get('name')} fans, the story is diagnosis: "
+            "which stretches were survivable, which possessions created the gap, and which player lines still translate forward."
+        )
+    return "\n\n".join(parts)
 
-    max_tokens = min(8000, 900 + round(duration / 9) * 90)
-    try:
-        if settings.anthropic_api_key:
+
+def _voice_script(facts: dict, clips: list[dict], seconds: int) -> tuple[str, str]:
+    """Narration script for the reel voice agent.
+
+    This is separate from the written recap: it is timed to the actual selected
+    clips and intended for a generated reel voice track.
+    """
+    a, h = facts["away"], facts["home"]
+    aa, ha = a.get("abbreviation"), h.get("abbreviation")
+    as_, hs = facts["away_score"], facts["home_score"]
+    leaders = facts["leaders"]
+    periods = facts["periods"]
+    period_line = "; ".join(f"{p['label']} {aa} {p['away']}-{p['home']} {ha}" for p in periods)
+    leader_lines = "\n".join(f"{r['team']} - {r['player']}: {r['stat_line']} ({r['category']})" for r in leaders[:8])
+    clip_lines = "\n".join(
+        f"{i + 1}. [{c.get('duration') or 24}s] {c.get('headline') or ''} - {c.get('description') or ''}"
+        for i, c in enumerate(clips[:40])
+    )
+    target_words = 220 if seconds <= 120 else 620 if seconds <= 300 else 1250
+    settings = get_settings()
+
+    if settings.anthropic_api_key:
+        try:
             import anthropic
 
             client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-            raw = ""
+            system = (
+                "You are ReplaysAI's reel voice agent. Write the spoken narration for a highlight reel, "
+                "not a written recap. Ground every line in the game facts and selected real clips. "
+                "Do not invent plays, stats, injuries, quotes, or stakes. Make it energetic, precise, "
+                "and personal to the fans watching these teams and stars. Include clip-by-clip cues."
+            )
+            prompt = (
+                f"Game: {a.get('name')} {as_} at {h.get('name')} {hs} ({facts['date']}).\n"
+                f"Target reel: {seconds} seconds. Target narration length: about {target_words} words.\n"
+                f"Period scores: {period_line or 'n/a'}\n"
+                f"Lead changes: {facts['lead_changes']}\n"
+                f"Stat leaders:\n{leader_lines or 'n/a'}\n\n"
+                f"Selected real clips, in playback order:\n{clip_lines or 'No clips published.'}\n\n"
+                "Write a voice-over script with these sections:\n"
+                "OPEN, CLIP-BY-CLIP SCRIPT, TRANSITIONS, CLOSE. "
+                "Each clip cue should name what the viewer is seeing and why it matters."
+            )
             for model in settings.anthropic_models:
                 try:
-                    response = client.messages.create(
+                    resp = client.messages.create(
                         model=model,
-                        max_tokens=max_tokens,
+                        max_tokens=900 if seconds <= 120 else 1900 if seconds <= 300 else 3600,
                         system=system,
-                        messages=turns,
+                        messages=[{"role": "user", "content": prompt}],
                     )
-                    raw = response.content[0].text
-                    break
+                    text = resp.content[0].text.strip()
+                    if text:
+                        return text, "anthropic"
                 except Exception as exc:
-                    print(f"[reels] story agent failed ({model}): {exc}")
-            if not raw:
-                return None
-        else:
-            from openai import OpenAI
+                    print(f"[reels] voice agent failed ({model}): {exc}")
+        except Exception as exc:
+            print(f"[reels] voice agent unavailable: {exc}")
 
-            response = OpenAI(api_key=settings.openai_api_key).chat.completions.create(
-                model=settings.openai_model,
-                max_tokens=max_tokens,
-                messages=[{"role": "system", "content": system}, *turns],
-            )
-            raw = response.choices[0].message.content or ""
-
-        match = re.search(r"\{.*\}", raw, re.DOTALL)
-        if not match:
-            return None
-        parsed = json.loads(match.group(0))
-
-        if parsed.get("action") == "ask" and parsed.get("question"):
-            return {"action": "ask", "question": str(parsed["question"])}
-
-        by_ref = {p["ref"]: p for p in facts["plays"]}
-        scenes = []
-        for raw_scene in parsed.get("scenes", [])[:50]:
-            scene_type = raw_scene.get("type")
-            seconds = raw_scene.get("duration")
-            seconds = max(5, min(14, int(seconds))) if isinstance(seconds, (int, float)) else 8
-            narration = str(raw_scene.get("narration") or "")
-            if scene_type == "moment":
-                play = by_ref.get(raw_scene.get("play_ref"))
-                if not play:
-                    continue
-                scenes.append(_moment_scene(facts, play, seconds, narration or None))
-            elif scene_type == "stat":
-                stats = [
-                    {"label": str(s.get("label") or ""), "value": str(s.get("value") or "")}
-                    for s in raw_scene.get("stats") or []
-                    if s.get("label")
-                ]
-                scene = _stat_scene(facts, seconds, narration or None)
-                if stats:
-                    scene["stats"] = stats[:8]
-                if raw_scene.get("heading"):
-                    scene["heading"] = str(raw_scene["heading"])
-                scenes.append(scene)
-            elif scene_type in ("title", "verdict", "break", "run"):
-                base = _title_scene(facts, narration or "", seconds) if scene_type == "title" else (
-                    _verdict_scene(facts, seconds, narration or None) if scene_type == "verdict" else {
-                        "type": scene_type,
-                        "duration": seconds,
-                        "heading": str(raw_scene.get("heading") or ""),
-                        "text": str(raw_scene.get("text") or ""),
-                        "narration": narration,
-                        "score": {"away": None, "home": None},
-                    }
-                )
-                if raw_scene.get("text") and scene_type in ("title", "verdict"):
-                    base["text"] = str(raw_scene["text"])
-                if raw_scene.get("heading"):
-                    base["heading"] = str(raw_scene["heading"])
-                scenes.append(base)
-
-        if len(scenes) < 3:
-            return None
-        return {
-            "action": "story",
-            "title": str(parsed.get("title") or f"{facts['away_abbr']} @ {facts['home_abbr']}"),
-            "focus": str(parsed.get("focus") or "full_summary"),
-            "duration_seconds": sum(scene["duration"] for scene in scenes),
-            "scene_count": len(scenes),
-            "scenes": scenes,
-            "generated_by": "llm",
-        }
-    except Exception as exc:
-        print(f"[reels] story agent failed: {exc}")
-        return None
+    winner, loser = (h, a) if (hs or 0) > (as_ or 0) else (a, h)
+    wsc, lsc = (hs, as_) if (hs or 0) > (as_ or 0) else (as_, hs)
+    lines = [
+        "OPEN",
+        f"{winner.get('name')} took this one over {loser.get('name')}, {wsc}-{lsc}. "
+        f"The reel starts with the scoreboard context: {period_line or 'published period scoring is limited'}, "
+        f"and a game flow with {facts['lead_changes']} lead change{'s' if facts['lead_changes'] != 1 else ''}.",
+        "CLIP-BY-CLIP SCRIPT",
+    ]
+    for i, clip in enumerate(clips[:12], 1):
+        headline = clip.get("headline") or clip.get("description") or "Published highlight"
+        lines.append(
+            f"{i}. {headline}. Use this moment to show how the game shifted, then connect it back to "
+            f"{winner.get('name')}'s control of the final margin."
+        )
+    if leaders:
+        lines.append("CLOSE")
+        lines.append(
+            "Anchor the closing beat on the published leaders: "
+            + "; ".join(f"{r['player']} ({r['team']}) {r['stat_line']}" for r in leaders[:4])
+            + ". That is the takeaway fans should remember before the next reel."
+        )
+    return "\n\n".join(lines), "fallback"
 
 
 @router.get("/{game_id}/reels")
 def get_reel_cuts(game_id: int):
-    sport, game_data, summary = _resolve_game(game_id)
-    facts = _story_facts(sport, game_data, summary)
+    sport, game_data, summary = _resolve(game_id)
+    clips = _clips_for(summary, sport)
+    facts = _facts(sport, game_data, summary)
+    cuts = []
+    for label, seconds, blurb in CUT_TIERS:
+        selected = _spread(clips, seconds)
+        voice_script, voice_source = _voice_script(facts, selected, seconds)
+        cuts.append({
+            "label": label,
+            "target_seconds": seconds,
+            "blurb": blurb,
+            "clip_count": len(selected),
+            "duration_seconds": sum(c["duration"] for c in selected),
+            "clips": _attach_overlays([_public_clip(c) for c in selected], facts),
+            "explainer": _explainer(facts, seconds),
+            "voice_script": voice_script,
+            "voice_source": voice_source,
+        })
     return {
         "game_id": game_id,
-        "play_count": len(facts["plays"]),
-        "cuts": [
-            {
-                "label": f"{length // 60} min story",
-                "duration_seconds": length,
-                "story": _build_story_data(facts, length),
-            }
-            for length in CUT_LENGTHS
-        ],
-        "rendering": {
-            "playback": "story_engine",
-            "reason": (
-                "Cuts are agent-built story reels rendered from real play-by-play, scoring "
-                "runs, and box-score data. Ask the reel agent for a custom focus or length — "
-                "the longer the reel, the deeper the story."
-            ),
-        },
+        "clip_count": len(clips),
+        "cuts": cuts,
+        "rendering": {"playback": "video"},
+    }
+
+
+def build_team_season_reel(team: str, max_games: int = 4) -> dict:
+    """A reel compiled from a team's PREVIOUS finished games — real highlight
+    clips from each recent game, tiered like the single-game cuts. `team` is a
+    'SPORT:ABBR' key (e.g. NBA:BOS)."""
+    if ":" not in team:
+        raise HTTPException(status_code=400, detail="team must be 'SPORT:ABBR'")
+    sport, abbr = team.split(":", 1)
+    sport, abbr = sport.upper(), abbr.upper()
+    games = fetch_espn_games(sport, limit=80, seasons=2)
+    finished = [
+        g for g in games
+        if g.get("status") == "final"
+        and abbr in {
+            (g.get("home_team") or {}).get("abbreviation", "").upper(),
+            (g.get("away_team") or {}).get("abbreviation", "").upper(),
+        }
+    ][:max_games]
+
+    all_clips: list[dict] = []
+    games_used = []
+    for g in finished:
+        try:
+            summary = fetch_espn_game_summary(sport, g["id"])
+            clips = _clips_for(summary, sport)
+        except Exception:
+            clips = []
+        if not clips:
+            continue
+        matchup = f"{(g.get('away_team') or {}).get('abbreviation')}@{(g.get('home_team') or {}).get('abbreviation')}"
+        games_used.append(matchup)
+        for c in clips:
+            c = dict(c)
+            c["headline"] = f"{matchup}: {c.get('headline','')}"
+            all_clips.append(c)
+
+    cuts = []
+    for label, seconds, blurb in CUT_TIERS:
+        selected = _spread(all_clips, seconds)
+        cuts.append({
+            "label": f"Season {label}",
+            "target_seconds": seconds,
+            "blurb": blurb,
+            "clip_count": len(selected),
+            "duration_seconds": sum(c["duration"] for c in selected),
+            "clips": [_public_clip(c) for c in selected],
+        })
+    return {
+        "team": team,
+        "games_used": games_used,
+        "clip_count": len(all_clips),
+        "cuts": cuts if all_clips else [],
     }
 
 
@@ -490,29 +433,51 @@ class ReelRequest(BaseModel):
 
 _STOPWORDS = {
     "the", "and", "for", "with", "from", "all", "any", "give", "show", "make",
-    "build", "create", "generate", "want", "reel", "reels", "video", "videos",
-    "clip", "clips", "highlight", "highlights", "play", "plays", "moments",
-    "minute", "minutes", "min", "second", "seconds", "sec", "long", "short",
-    "please", "that", "this", "game", "best", "top", "every", "just", "only",
-    "story", "stories", "recap", "about", "around",
+    "build", "create", "generate", "want", "reel", "reels", "video", "clip",
+    "clips", "highlight", "highlights", "minute", "minutes", "min", "second",
+    "seconds", "sec", "long", "short", "please", "that", "this", "game", "best",
+    "top", "every", "just", "only", "story", "recap", "about", "around", "me", "of",
+}
+
+_QUARTER_WORDS = {
+    "q1": ["q1", "1st quarter", "first quarter"],
+    "q2": ["q2", "2nd quarter", "second quarter"],
+    "q3": ["q3", "3rd quarter", "third quarter"],
+    "q4": ["q4", "4th quarter", "fourth quarter", "final quarter"],
+    "ot": ["ot", "overtime"],
+    "1st half": ["1st half", "first half"],
+    "2nd half": ["2nd half", "second half"],
 }
 
 
 def _budget_from_prompt(prompt: str) -> int | None:
     text = prompt.lower()
-    minutes = re.search(r"(\d+)\s*-?\s*min", text)
-    if minutes:
-        return max(30, min(900, int(minutes.group(1)) * 60))
-    seconds = re.search(r"(\d+)\s*-?\s*sec", text)
-    if seconds:
-        return max(20, min(900, int(seconds.group(1))))
+    m = re.search(r"(\d+)\s*-?\s*min", text)
+    if m:
+        return max(30, min(900, int(m.group(1)) * 60))
+    s = re.search(r"(\d+)\s*-?\s*sec", text)
+    if s:
+        return max(20, min(900, int(s.group(1))))
     return None
+
+
+def _keyword_filter(clips: list[dict], prompt: str) -> list[dict]:
+    text = prompt.lower()
+    tokens = [t for t in re.findall(r"[a-z0-9']+", text) if len(t) > 2 and t not in _STOPWORDS]
+    if not tokens:
+        return []
+    matched = []
+    for clip in clips:
+        hay = f"{clip.get('headline','')} {clip.get('description','')}".lower()
+        if any(tok in hay for tok in tokens):
+            matched.append(clip)
+    return matched
 
 
 def _is_vague(body: ReelRequest, budget_hint: int | None) -> bool:
     tokens = [
-        token for token in re.findall(r"[a-z0-9']+", body.prompt.lower())
-        if len(token) > 2 and token not in _STOPWORDS
+        t for t in re.findall(r"[a-z0-9']+", body.prompt.lower())
+        if len(t) > 2 and t not in _STOPWORDS
     ]
     return not tokens and budget_hint is None
 
@@ -521,44 +486,143 @@ def _already_asked(body: ReelRequest) -> bool:
     return any(turn.role == "assistant" for turn in body.messages)
 
 
+def _curate_llm(body: ReelRequest, clips: list[dict], target: int) -> dict | None:
+    """LLM director: pick which real clips match the fan's focus, in order, and
+    write one-line narration per clip. Returns ask/reel dict, or None to fall back."""
+    settings = get_settings()
+    if not settings.anthropic_api_key:
+        return None
+
+    catalog = "\n".join(
+        f"{i} [{c['duration']}s] {c.get('headline','')} — {c.get('description','')[:90]}"
+        for i, c in enumerate(clips[:80])
+    )
+    system = (
+        "You are ReplaysAI's reel director. You assemble a highlight reel from a catalog of "
+        "REAL video clips of one game. Never invent clips; only reference clip indices from the "
+        "catalog. The reel should cover the fan's requested focus (a player, a quarter, a kind "
+        "of play like fouls/dunks/threes, or the whole game) and roughly fit the target length.\n\n"
+        "Each turn do ONE of:\n"
+        "1. If the request is too vague AND you haven't already asked, ask ONE short question "
+        "(offer focus options + 2/5/10 minute lengths).\n"
+        f"2. Otherwise pick clips. Target total ~{target} seconds. Order them to tell the story. "
+        "Write a short 1-line narration per clip (documentary voice-over, grounded in the clip).\n\n"
+        "Respond with ONLY JSON, one of:\n"
+        '{"action":"ask","question":"..."}\n'
+        '{"action":"reel","title":"...","focus":"...","clips":[{"index":3,"narration":"..."}]}\n\n'
+        f"CLIP CATALOG:\n{catalog}"
+    )
+    turns = [{"role": t.role, "content": t.text} for t in body.messages[-10:] if t.text.strip()]
+    if not turns or turns[-1]["role"] != "user" or turns[-1]["content"] != body.prompt:
+        turns.append({"role": "user", "content": body.prompt})
+
+    try:
+        import anthropic
+
+        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+        raw = ""
+        for model in settings.anthropic_models:
+            try:
+                resp = client.messages.create(model=model, max_tokens=2000, system=system, messages=turns)
+                raw = resp.content[0].text
+                break
+            except Exception as exc:
+                print(f"[reels] director failed ({model}): {exc}")
+        if not raw:
+            return None
+
+        match = re.search(r"\{.*\}", raw, re.DOTALL)
+        if not match:
+            return None
+        parsed = json.loads(match.group(0))
+        if parsed.get("action") == "ask" and parsed.get("question"):
+            return {"action": "ask", "question": str(parsed["question"])}
+
+        chosen = []
+        for item in parsed.get("clips", [])[:60]:
+            idx = item.get("index")
+            if isinstance(idx, int) and 0 <= idx < len(clips):
+                chosen.append(_public_clip(clips[idx], str(item.get("narration") or "") or None))
+        if not chosen:
+            return None
+        return {
+            "action": "reel",
+            "title": str(parsed.get("title") or "Custom reel"),
+            "focus": str(parsed.get("focus") or body.prompt[:60]),
+            "clips": chosen,
+        }
+    except Exception as exc:
+        print(f"[reels] director failed: {exc}")
+        return None
+
+
 @router.post("/{game_id}/reels/generate")
 def generate_reel(game_id: int, body: ReelRequest):
-    sport, game_data, summary = _resolve_game(game_id)
-    facts = _story_facts(sport, game_data, summary)
-    if not facts["plays"]:
+    sport, game_data, summary = _resolve(game_id)
+    clips = _clips_for(summary, sport)
+    facts = _facts(sport, game_data, summary)
+    if not clips:
         raise HTTPException(
             status_code=404,
-            detail="Play-by-play is not available for this game yet, so a story reel cannot be built.",
+            detail="No highlight video is published for this game yet, so a reel can't be built.",
         )
 
     budget_hint = body.max_seconds or _budget_from_prompt(body.prompt)
-    budget = budget_hint or 120
+    target = budget_hint or 180
 
-    result = _build_story_llm(body, facts, budget)
-    source = "llm"
+    result = _curate_llm(body, clips, target)
+    source = "anthropic"
     if result is None:
-        # Data fallback keeps the same ask-then-generate shape.
+        source = "fallback"
         if _is_vague(body, budget_hint) and not _already_asked(body):
             result = {
                 "action": "ask",
                 "question": (
-                    "What should this reel focus on — a player, one team's run, or the full "
-                    "game story? And how deep should it go: 30 seconds, 2, 5, or 10 minutes?"
+                    "What should this reel focus on — a player, one quarter (e.g. Q4), a kind of "
+                    "play (fouls, dunks, threes), or the whole game? And how long: 2, 5, or 10 minutes?"
                 ),
             }
         else:
-            result = {"action": "story", **_build_story_data(facts, budget, focus=body.prompt[:80])}
-        source = "fallback"
+            # Keyword-match the focus against real clip metadata; fall back to a
+            # whole-game spread at the requested length.
+            text = body.prompt.lower()
+            matched = _keyword_filter(clips, body.prompt)
+            for label, words in _QUARTER_WORDS.items():
+                if any(w in text for w in words):
+                    q_clips = [c for c in clips if any(w in f"{c.get('headline','')} {c.get('description','')}".lower() for w in words)]
+                    if q_clips:
+                        matched = q_clips
+                    break
+            pool = matched or clips
+            selected = pool if matched else _spread(clips, target)
+            if matched and budget_hint:
+                selected = _spread(matched, target) if len(matched) > 3 else matched
+            result = {
+                "action": "reel",
+                "title": (body.prompt[:60] or "Custom reel"),
+                "focus": body.prompt[:60],
+                "clips": [_public_clip(c) for c in selected],
+            }
 
     if result["action"] == "ask":
         return {"game_id": game_id, "action": "ask", "question": result["question"], "source": source}
 
-    story = {key: value for key, value in result.items() if key != "action"}
+    reel_clips = _attach_overlays(result["clips"], facts)
+    total = sum(c["duration"] for c in reel_clips)
+    voice_script, voice_source = _voice_script(facts, reel_clips, target)
     return {
         "game_id": game_id,
-        "action": "story",
+        "action": "reel",
         "prompt": body.prompt,
-        "story": story,
-        "note": f"Built a {max(1, round(story['duration_seconds'] / 60))}-minute story: {story['title']}",
+        "reel": {
+            "title": result["title"],
+            "focus": result.get("focus"),
+            "clip_count": len(reel_clips),
+            "duration_seconds": total,
+            "clips": reel_clips,
+            "voice_script": voice_script,
+            "voice_source": voice_source,
+        },
+        "note": f"Built a {max(1, round(total / 60))}-minute reel from {len(reel_clips)} real clips: {result['title']}",
         "source": source,
     }

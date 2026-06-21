@@ -108,7 +108,7 @@ async def generate_fan_recap(game_id: int, team: str | None = Query(None)):
         system=(
             f"You write game recaps for die-hard {fan_team.get('name')} fans, from their perspective "
             "('we', 'our'). Ground everything strictly in the provided data — never invent stats or plays. "
-            "Output Markdown, 250-400 words."
+            "Output Markdown, 600-900 words, with detailed emotional and tactical analysis."
         ),
         prompt=(
             f"{tone}\n\nGame: {away.get('name')} {game.get('away_score')} at "
@@ -116,7 +116,7 @@ async def generate_fan_recap(game_id: int, team: str | None = Query(None)):
             f"Statistical leaders:\n{leader_lines or 'not available'}\n\n"
             f"Late notable plays:\n{play_lines or 'not available'}"
         ),
-        max_tokens=900,
+        max_tokens=1700,
     )
     generated_by = "llm" if content else "data"
 

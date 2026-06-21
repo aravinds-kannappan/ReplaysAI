@@ -442,6 +442,493 @@ def extract_summary_videos(summary: dict) -> list[dict]:
     return clips
 
 
+_NBA_STAT_LINE = [
+    ("avgPoints", "PPG"), ("avgRebounds", "RPG"), ("avgAssists", "APG"),
+    ("avgSteals", "SPG"), ("avgBlocks", "BPG"), ("gamesPlayed", "GP"),
+]
+_NFL_STAT_LINE = [
+    ("passingYards", "Pass Yds"), ("passingTouchdowns", "Pass TD"),
+    ("rushingYards", "Rush Yds"), ("rushingTouchdowns", "Rush TD"),
+    ("receivingYards", "Rec Yds"), ("receivingTouchdowns", "Rec TD"),
+    ("totalTackles", "Tackles"), ("sacks", "Sacks"), ("interceptions", "INT"),
+]
+
+TEAM_STAR_PRIORITY = {
+    "NBA": {
+        "BOS": ["Jayson Tatum", "Jaylen Brown", "Derrick White", "Payton Pritchard", "Sam Hauser"],
+        "LAL": ["LeBron James", "Luka Doncic", "Austin Reaves", "Rui Hachimura"],
+        "GS": ["Stephen Curry", "Jimmy Butler III", "Draymond Green", "Brandin Podziemski"],
+        "NY": ["Jalen Brunson", "Karl-Anthony Towns", "OG Anunoby", "Mikal Bridges", "Josh Hart"],
+        "OKC": ["Shai Gilgeous-Alexander", "Jalen Williams", "Chet Holmgren", "Luguentz Dort"],
+        "DEN": ["Nikola Jokic", "Jamal Murray", "Aaron Gordon", "Michael Porter Jr."],
+        "MIN": ["Anthony Edwards", "Julius Randle", "Rudy Gobert", "Jaden McDaniels"],
+        "MIL": ["Giannis Antetokounmpo", "Damian Lillard", "Khris Middleton", "Brook Lopez"],
+        "DAL": ["Anthony Davis", "Kyrie Irving", "Klay Thompson", "Dereck Lively II"],
+        "PHX": ["Devin Booker", "Kevin Durant", "Bradley Beal"],
+        "CLE": ["Donovan Mitchell", "Evan Mobley", "Darius Garland", "Jarrett Allen"],
+        "PHI": ["Joel Embiid", "Tyrese Maxey", "Paul George", "Jared McCain"],
+        "MIA": ["Bam Adebayo", "Tyler Herro", "Andrew Wiggins"],
+        "LAC": ["Kawhi Leonard", "James Harden", "Ivica Zubac"],
+        "SAS": ["Victor Wembanyama", "De'Aaron Fox", "Devin Vassell", "Stephon Castle"],
+        "ORL": ["Paolo Banchero", "Franz Wagner", "Jalen Suggs"],
+        "HOU": ["Alperen Sengun", "Jalen Green", "Amen Thompson", "Jabari Smith Jr."],
+        "MEM": ["Ja Morant", "Jaren Jackson Jr.", "Desmond Bane"],
+        "IND": ["Tyrese Haliburton", "Pascal Siakam", "Bennedict Mathurin", "Myles Turner"],
+        "NO": ["Zion Williamson", "Trey Murphy III", "CJ McCollum", "Herbert Jones"],
+        "ATL": ["Trae Young", "Jalen Johnson", "Dyson Daniels", "De'Andre Hunter"],
+        "TOR": ["Scottie Barnes", "Brandon Ingram", "RJ Barrett", "Immanuel Quickley"],
+        "CHA": ["LaMelo Ball", "Brandon Miller", "Miles Bridges", "Mark Williams"],
+        "DET": ["Cade Cunningham", "Jalen Duren", "Ausar Thompson", "Jaden Ivey"],
+        "CHI": ["Coby White", "Josh Giddey", "Nikola Vucevic", "Matas Buzelis"],
+        "SAC": ["Domantas Sabonis", "Zach LaVine", "DeMar DeRozan", "Keegan Murray"],
+        "POR": ["Scoot Henderson", "Shaedon Sharpe", "Deni Avdija", "Jerami Grant"],
+        "UTAH": ["Lauri Markkanen", "Keyonte George", "Walker Kessler", "Collin Sexton"],
+        "WSH": ["Bilal Coulibaly", "Alex Sarr", "Jordan Poole", "Corey Kispert"],
+        "BKN": ["Cam Thomas", "Nic Claxton", "Cameron Johnson"],
+    },
+    "NFL": {
+        "BUF": ["Josh Allen", "James Cook III", "Keon Coleman", "Khalil Shakir", "Dalton Kincaid"],
+        "KC": ["Patrick Mahomes", "Travis Kelce", "Rashee Rice", "Chris Jones", "Xavier Worthy"],
+        "BAL": ["Lamar Jackson", "Derrick Henry", "Zay Flowers", "Mark Andrews", "Roquan Smith"],
+        "CIN": ["Joe Burrow", "Ja'Marr Chase", "Tee Higgins", "Trey Hendrickson"],
+        "DET": ["Jared Goff", "Jahmyr Gibbs", "Amon-Ra St. Brown", "Sam LaPorta", "Aidan Hutchinson"],
+        "PHI": ["Jalen Hurts", "Saquon Barkley", "A.J. Brown", "DeVonta Smith", "Jalen Carter"],
+        "SF": ["Brock Purdy", "Christian McCaffrey", "George Kittle", "Deebo Samuel", "Nick Bosa"],
+        "DAL": ["Dak Prescott", "CeeDee Lamb", "Micah Parsons", "George Pickens"],
+        "CHI": ["Caleb Williams", "DJ Moore", "Rome Odunze", "Cole Kmet", "D'Andre Swift"],
+        "CAR": ["Bryce Young", "Chuba Hubbard", "Tetairoa McMillan", "Xavier Legette", "Jaycee Horn"],
+        "HOU": ["C.J. Stroud", "Nico Collins", "Joe Mixon", "Will Anderson Jr.", "Danielle Hunter"],
+        "LAC": ["Justin Herbert", "Ladd McConkey", "Keenan Allen", "Derwin James Jr."],
+        "LAR": ["Matthew Stafford", "Puka Nacua", "Davante Adams", "Kyren Williams", "Jared Verse"],
+        "GB": ["Jordan Love", "Josh Jacobs", "Romeo Doubs", "Christian Watson", "Rashan Gary"],
+        "MIN": ["Justin Jefferson", "Jordan Addison", "T.J. Hockenson", "J.J. McCarthy"],
+        "MIA": ["Tua Tagovailoa", "Tyreek Hill", "Jaylen Waddle", "De'Von Achane", "Jalen Ramsey"],
+        "NYJ": ["Garrett Wilson", "Breece Hall", "Sauce Gardner", "Quinnen Williams"],
+        "NYG": ["Malik Nabers", "Dexter Lawrence II", "Brian Burns", "Tyrone Tracy Jr."],
+        "WAS": ["Jayden Daniels", "Terry McLaurin", "Deebo Samuel", "Zach Ertz"],
+        "ATL": ["Michael Penix Jr.", "Bijan Robinson", "Drake London", "Kyle Pitts"],
+        "TB": ["Baker Mayfield", "Mike Evans", "Bucky Irving", "Antoine Winfield Jr."],
+        "SEA": ["Sam Darnold", "Jaxon Smith-Njigba", "Kenneth Walker III", "Devon Witherspoon"],
+        "DEN": ["Bo Nix", "Courtland Sutton", "Pat Surtain II", "Nik Bonitto"],
+        "PIT": ["T.J. Watt", "DK Metcalf", "George Pickens", "Najee Harris"],
+        "LV": ["Brock Bowers", "Ashton Jeanty", "Maxx Crosby", "Jakobi Meyers"],
+        "IND": ["Anthony Richardson", "Jonathan Taylor", "Michael Pittman Jr.", "DeForest Buckner"],
+        "JAX": ["Trevor Lawrence", "Brian Thomas Jr.", "Travis Etienne Jr.", "Josh Hines-Allen"],
+        "TEN": ["Cam Ward", "Tony Pollard", "Calvin Ridley", "Jeffery Simmons"],
+        "NO": ["Chris Olave", "Alvin Kamara", "Tyrann Mathieu", "Demario Davis"],
+        "CLE": ["Myles Garrett", "Jerry Jeudy", "David Njoku", "Denzel Ward"],
+        "NE": ["Drake Maye", "Stefon Diggs", "Rhamondre Stevenson", "Christian Gonzalez"],
+        "ARI": ["Kyler Murray", "Marvin Harrison Jr.", "Trey McBride", "Budda Baker"],
+    },
+}
+
+
+def _flatten_athlete_stats(item: dict, names_by_cat: dict[str, list[str]] | None = None) -> dict[str, float]:
+    categories = item.get("categories", [])
+    names_by_cat = names_by_cat or {cat.get("name"): cat.get("names", []) for cat in categories}
+    flat: dict[str, float] = {}
+    for cat in categories:
+        for name, value in zip(names_by_cat.get(cat.get("name"), []), cat.get("values", [])):
+            if isinstance(value, (int, float)):
+                flat[name] = value
+    return flat
+
+
+def _athlete_team_abbr(athlete: dict) -> str:
+    return (
+        athlete.get("teamShortName")
+        or ((athlete.get("teams") or [{}])[0].get("abbreviation"))
+        or ((athlete.get("team") or {}).get("abbreviation"))
+        or ""
+    ).upper()
+
+
+def _star_score(sport: str, player: dict, flat: dict[str, float] | None = None) -> float:
+    """Rank likely fan-facing stars instead of raw roster order.
+
+    ESPN's public roster endpoint is not consistently sorted, especially during
+    off-season roster churn. The leaderboard payload is better, but raw stat
+    sums overvalue games played or one-volume category. This score keeps the
+    ordering aligned with what fans expect to pick.
+    """
+    flat = flat or {}
+    position = str(player.get("position") or "").upper()
+    if sport.upper() == "NBA":
+        return (
+            float(flat.get("avgPoints", 0)) * 5.0
+            + float(flat.get("avgAssists", 0)) * 3.0
+            + float(flat.get("avgRebounds", 0)) * 2.2
+            + float(flat.get("avgSteals", 0)) * 6.0
+            + float(flat.get("avgBlocks", 0)) * 5.0
+            + min(float(flat.get("gamesPlayed", 0)), 82) * 0.15
+        )
+
+    offense = (
+        float(flat.get("passingYards", 0)) * 0.018
+        + float(flat.get("passingTouchdowns", 0)) * 5.5
+        + float(flat.get("rushingYards", 0)) * 0.075
+        + float(flat.get("rushingTouchdowns", 0)) * 7.0
+        + float(flat.get("receivingYards", 0)) * 0.075
+        + float(flat.get("receivingTouchdowns", 0)) * 7.0
+    )
+    defense = (
+        float(flat.get("totalTackles", 0)) * 1.1
+        + float(flat.get("sacks", 0)) * 10.0
+        + float(flat.get("interceptions", 0)) * 12.0
+    )
+    position_weight = {
+        "QB": 36.0,
+        "RB": 20.0,
+        "WR": 18.0,
+        "TE": 14.0,
+        "DE": 10.0,
+        "EDGE": 10.0,
+        "LB": 9.0,
+        "CB": 8.0,
+        "S": 7.0,
+        "FS": 7.0,
+        "SS": 7.0,
+    }.get(position, 0.0)
+    return offense + defense + position_weight
+
+
+def _fetch_byathlete_pages(sport: str, max_pages: int = 12) -> tuple[list[dict], dict[str, list[str]]]:
+    keys = get_league_keys(sport)
+    items: list[dict] = []
+    names_by_cat: dict[str, list[str]] = {}
+    page = 1
+    total_pages = 1
+    while page <= min(total_pages, max_pages):
+        data = _get_json(
+            f"{ESPN_WEB_BASE}/{keys['sport']}/{keys['league']}/statistics/byathlete",
+            {"limit": 25, "page": page},
+        )
+        if not names_by_cat:
+            names_by_cat = {c.get("name"): c.get("names", []) for c in data.get("categories", [])}
+        items.extend(data.get("athletes", []))
+        total_pages = int((data.get("pagination") or {}).get("pages") or total_pages)
+        page += 1
+    return items, names_by_cat
+
+
+def _fallback_roster_score(sport: str, player: dict, position_seen: dict[str, int], index: int) -> float:
+    position = str(player.get("position") or "").upper()
+    ordinal = position_seen.get(position, 0)
+    position_seen[position] = ordinal + 1
+
+    if sport.upper() == "NBA":
+        # ESPN's NBA roster page is usually already star-skewed. Keep that
+        # order as the main fallback signal.
+        return 1000 - index
+
+    base = {
+        "QB": 100,
+        "RB": 88,
+        "WR": 84,
+        "TE": 78,
+        "DE": 72,
+        "EDGE": 72,
+        "LB": 70,
+        "CB": 68,
+        "S": 66,
+        "FS": 66,
+        "SS": 66,
+        "K": 45,
+    }.get(position, 50)
+    duplicate_penalty = {
+        "QB": 95,
+        "RB": 18,
+        "WR": 12,
+        "TE": 14,
+        "K": 40,
+    }.get(position, 6)
+    return base - ordinal * duplicate_penalty - index * 0.01
+
+
+def _presentation_players(sport: str, team_abbr: str, ranked: list[dict], limit: int) -> list[dict]:
+    priority = {
+        name.lower(): index
+        for index, name in enumerate(TEAM_STAR_PRIORITY.get(sport.upper(), {}).get(team_abbr.upper(), []))
+    }
+    ordered = sorted(
+        ranked,
+        key=lambda p: (
+            priority.get(str(p.get("name") or "").lower(), 999),
+            -p.get("_score", 0),
+            str(p.get("name") or ""),
+        ),
+    )
+    cleaned = []
+    qb_seen = False
+    for player in ordered:
+        position = str(player.get("position") or "").upper()
+        name = str(player.get("name") or "")
+        if sport.upper() == "NFL" and position == "QB":
+            if qb_seen and name.lower() not in priority:
+                continue
+            qb_seen = True
+        if player.get("id") in {p.get("id") for p in cleaned}:
+            continue
+        player = dict(player)
+        player.pop("_score", None)
+        cleaned.append(player)
+        if len(cleaned) >= limit:
+            break
+    return cleaned
+
+
+# Broader, sport-agnostic fallback labels so a player who is found but whose
+# production sits outside the curated stat line still shows real averages
+# instead of "not published".
+_FALLBACK_STAT_LABELS: dict[str, str] = {
+    "avgPoints": "PPG", "avgRebounds": "RPG", "avgAssists": "APG", "avgSteals": "SPG",
+    "avgBlocks": "BPG", "avgMinutes": "MPG", "points": "PTS", "rebounds": "REB", "assists": "AST",
+    "passingYards": "Pass Yds", "passingTouchdowns": "Pass TD", "rushingYards": "Rush Yds",
+    "rushingTouchdowns": "Rush TD", "receivingYards": "Rec Yds", "receivingTouchdowns": "Rec TD",
+    "receptions": "Rec", "totalTackles": "Tackles", "sacks": "Sacks", "interceptions": "INT",
+    "fieldGoalsMade": "FGM", "completions": "Comp", "gamesPlayed": "GP",
+}
+
+
+def _fallback_line(flat: dict[str, float]) -> list[dict]:
+    """Up to 5 of a player's most meaningful numeric stats, for athletes who fall
+    outside the curated per-sport stat line."""
+    line = []
+    for key, label in _FALLBACK_STAT_LABELS.items():
+        value = flat.get(key)
+        if value:
+            line.append({"label": label, "value": round(value, 1) if isinstance(value, float) else value})
+        if len(line) >= 5:
+            break
+    return line
+
+
+def fetch_espn_athlete_stats(sport: str, ids: list[int]) -> dict[int, dict]:
+    """Season stat lines for specific athletes, compiled from ESPN's by-athlete
+    leaderboard. Returns {athlete_id: {id, name, line: [{label, value}]}}."""
+    sport_key = sport.upper()
+    want = {int(i) for i in ids}
+    if not want:
+        return {}
+    try:
+        # Followed players can be surfaced from a team's roster (beyond the top
+        # of the leaderboard), so scan deep enough to cover them, not just the
+        # league leaders.
+        athletes, names_by_cat = _fetch_byathlete_pages(sport_key, max_pages=40)
+    except Exception:
+        return {}
+
+    spec = _NBA_STAT_LINE if sport_key == "NBA" else _NFL_STAT_LINE
+    out: dict[int, dict] = {}
+    for item in athletes:
+        athlete = item.get("athlete", {})
+        aid = athlete.get("id")
+        if not aid or int(aid) not in want:
+            continue
+        flat = _flatten_athlete_stats(item, names_by_cat)
+        line = []
+        for name, label in spec:
+            value = flat.get(name)
+            if value:
+                line.append({"label": label, "value": round(value, 1) if isinstance(value, float) else value})
+        if not line:
+            line = _fallback_line(flat)
+        out[int(aid)] = {
+            "id": int(aid),
+            "name": athlete.get("displayName"),
+            "team": athlete.get("teamShortName") or ((athlete.get("teams") or [{}])[0].get("abbreviation")),
+            "line": line[:5],
+        }
+    return out
+
+
+def fetch_espn_team_stars(sport: str, team_id: str | int, limit: int = 10) -> list[dict]:
+    """Top fan-facing players for a team.
+
+    Prefer ESPN's by-athlete leaderboard filtered to the team abbreviation. It
+    is usually more reliable than the roster page for "who are the stars?".
+    Fill with roster players only if the leaderboard lacks depth.
+    """
+    keys = get_league_keys(sport)
+    sport_key = sport.upper()
+    roster = fetch_espn_team_roster(sport_key, team_id, limit=80)
+    team_abbr = (roster[0].get("team") if roster else "") or ""
+    team_name = (roster[0].get("team_name") if roster else "") or ""
+    by_id = {p["id"]: p for p in roster}
+    stars: list[dict] = []
+    seen: set[int] = set()
+
+    if team_abbr:
+        try:
+            athletes, names_by_cat = _fetch_byathlete_pages(sport_key)
+            for item in athletes:
+                athlete = item.get("athlete") or {}
+                aid = athlete.get("id")
+                if not aid or _athlete_team_abbr(athlete) != team_abbr.upper():
+                    continue
+                position = athlete.get("position") or {}
+                flat = _flatten_athlete_stats(item, names_by_cat)
+                player = {
+                    "id": int(aid),
+                    "name": athlete.get("displayName") or athlete.get("fullName"),
+                    "position": position.get("abbreviation") or position.get("name"),
+                    "jersey": athlete.get("jersey"),
+                    "team": team_abbr,
+                    "team_name": team_name,
+                    "sport": sport_key,
+                    "headshot": (athlete.get("headshot") or {}).get("href"),
+                    "_score": _star_score(sport_key, {
+                        "position": position.get("abbreviation") or position.get("name"),
+                    }, flat),
+                }
+                if not player["name"]:
+                    continue
+                roster_player = by_id.get(player["id"])
+                if roster_player:
+                    player = {**roster_player, **{k: v for k, v in player.items() if v}}
+                stars.append(player)
+        except Exception:
+            pass
+
+    for player in sorted(stars, key=lambda p: p.get("_score", 0), reverse=True):
+        seen.add(player["id"])
+    ranked = sorted(stars, key=lambda p: p.get("_score", 0), reverse=True)
+
+    position_seen: dict[str, int] = {}
+    for index, player in enumerate(roster):
+        if player["id"] in seen:
+            continue
+        player = {**player, "_score": _fallback_roster_score(sport_key, player, position_seen, index)}
+        if sport_key == "NBA":
+            # Injured or off-cycle stars can disappear from ESPN's by-athlete
+            # leaderboard while still being the players fans expect to follow.
+            player["_score"] += 250
+        ranked.append(player)
+        seen.add(player["id"])
+
+    if sport_key == "NFL":
+        ranked.sort(key=lambda p: p.get("_score", 0), reverse=True)
+    elif roster:
+        roster_order = {player["id"]: index for index, player in enumerate(roster)}
+        ranked.sort(key=lambda p: (-p.get("_score", 0), roster_order.get(p["id"], 999)))
+
+    if len(ranked) < limit:
+        for index, player in enumerate(roster):
+            if player["id"] in seen:
+                continue
+            player = {**player, "_score": _fallback_roster_score(sport_key, player, position_seen, index)}
+            ranked.append(player)
+            seen.add(player["id"])
+
+    return _presentation_players(sport_key, team_abbr, ranked, limit)
+
+
+def fetch_espn_team_roster(sport: str, team_id: str | int, limit: int = 60) -> list[dict]:
+    """Real ESPN roster for a single team so the demo can offer player follows
+    grouped by the teams a fan picked."""
+    keys = get_league_keys(sport)
+    sport_key = sport.upper()
+    try:
+        data = _get_json(
+            f"{ESPN_SITE_BASE}/{keys['sport']}/{keys['league']}/teams/{team_id}/roster"
+        )
+    except Exception:
+        return []
+
+    team_block = data.get("team") or {}
+    team_abbr = team_block.get("abbreviation")
+    team_name = team_block.get("displayName") or team_block.get("name")
+
+    # NBA returns a flat athletes list; NFL groups athletes by position bucket.
+    raw_groups = data.get("athletes") or []
+    athletes_raw: list[dict] = []
+    for group in raw_groups:
+        if isinstance(group, dict) and "items" in group:
+            athletes_raw.extend(group.get("items") or [])
+        else:
+            athletes_raw.append(group)
+
+    players = []
+    for athlete in athletes_raw:
+        if not athlete.get("id"):
+            continue
+        position = (athlete.get("position") or {})
+        players.append({
+            "id": int(athlete.get("id")),
+            "name": athlete.get("displayName") or athlete.get("fullName"),
+            "position": position.get("abbreviation") or position.get("name"),
+            "jersey": athlete.get("jersey"),
+            "team": team_abbr,
+            "team_name": team_name,
+            "sport": sport_key,
+            "headshot": (athlete.get("headshot") or {}).get("href"),
+        })
+        if len(players) >= limit:
+            break
+
+    # Keep roster fallback roughly star-biased when no leaderboard is available.
+    try:
+        stats = fetch_espn_athlete_stats(sport_key, [p["id"] for p in players])
+        def _star(p: dict) -> float:
+            flat = {
+                {
+                    "PPG": "avgPoints",
+                    "RPG": "avgRebounds",
+                    "APG": "avgAssists",
+                    "SPG": "avgSteals",
+                    "BPG": "avgBlocks",
+                    "GP": "gamesPlayed",
+                    "Pass Yds": "passingYards",
+                    "Pass TD": "passingTouchdowns",
+                    "Rush Yds": "rushingYards",
+                    "Rush TD": "rushingTouchdowns",
+                    "Rec Yds": "receivingYards",
+                    "Rec TD": "receivingTouchdowns",
+                    "Tackles": "totalTackles",
+                    "Sacks": "sacks",
+                    "INT": "interceptions",
+                }.get(s.get("label"), ""): s.get("value")
+                for s in stats.get(p["id"], {}).get("line", [])
+                if isinstance(s.get("value"), (int, float))
+            }
+            flat.pop("", None)
+            return _star_score(sport_key, p, flat)
+        players.sort(key=_star, reverse=True)
+    except Exception:
+        pass
+    return players
+
+
+def fetch_espn_news(sport: str | None = None, limit: int = 12) -> list[dict]:
+    """Tailored headline feed straight from ESPN's public news endpoint."""
+    sports = [sport.upper()] if sport else ["NBA", "NFL"]
+    articles = []
+    for sport_key in sports:
+        keys = get_league_keys(sport_key)
+        try:
+            data = _get_json(
+                f"{ESPN_SITE_BASE}/{keys['sport']}/{keys['league']}/news",
+                {"limit": limit},
+            )
+        except Exception:
+            continue
+        for item in data.get("articles", []):
+            images = item.get("images") or []
+            web_links = (item.get("links") or {}).get("web") or {}
+            articles.append({
+                "id": str(item.get("id") or item.get("guid") or len(articles) + 1),
+                "headline": item.get("headline") or item.get("title") or "",
+                "description": item.get("description") or "",
+                "published": item.get("published"),
+                "sport": sport_key,
+                "image": (images[0].get("url") if images else None),
+                "link": web_links.get("href"),
+                "type": item.get("type") or "story",
+            })
+    articles.sort(key=lambda a: a.get("published") or "", reverse=True)
+    return articles[:limit if sport else limit * 2]
+
+
 def fetch_espn_athletes(sport: str, limit: int = 80) -> list[dict]:
     keys = get_league_keys(sport)
     sport_key = sport.upper()

@@ -1,73 +1,32 @@
-# React + TypeScript + Vite
+# ReplaysAI — Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Vite + React 19 + TypeScript single-page app for ReplaysAI. See the [root README](../README.md) for
+full architecture, system design, and tradeoffs.
 
-Currently, two official plugins are available:
+## Stack
+- **React 19 + TypeScript + Vite** — SPA build.
+- **React Router 7** — a tabbed `Feed` shell (`/feed`, `/season`, `/reels`, `/extras`) plus dedicated
+  routes `/dream-team`, `/reel/:gameId`, `/game/:id`, `/onboarding`.
+- **TanStack Query** — server state; query keys derive from the fan's picks so caching is per-fan.
+- **localStorage** — the entire anonymous fan profile (teams, players, picks, rosters). No auth.
+- **Browser `speechSynthesis` / `SpeechRecognition`** — voiced reels + interrupt-and-ask.
+- **html-to-image** — shareable Dream Team result card. **hls.js** — ESPN HLS clip playback.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Develop
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev        # http://localhost:5173, proxies /api → http://127.0.0.1:8001
+npm run build      # tsc -b + vite build
+npm run lint       # eslint
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Set `VITE_API_BASE_URL` only if the API is not same-origin (empty by default; dev uses the Vite proxy).
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## Key files
+- `pages/Landing.tsx` — canvas broadcast hero with the four named agents.
+- `pages/Feed.tsx` — dashboard + Season/Reels/Extras tabs; all panels read the localStorage profile.
+- `pages/DreamTeam.tsx` — roster builder → Monte-Carlo result card.
+- `pages/ReelStudio.tsx` — voiced reel player with overlays + interrupt-and-ask.
+- `components/ReelPlayer.tsx` — TTS-narrated clip player with audio ducking.
+- `hooks/useUser.ts` — anonymous identity + favorite teams/players in localStorage.

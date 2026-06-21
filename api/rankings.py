@@ -3,7 +3,9 @@ from typing import Optional
 from fastapi import APIRouter, Query
 
 from cache.redis_client import cache_get, cache_set
-from api.espn_public import fetch_espn_games, fetch_espn_teams
+from api.espn_public import (
+    fetch_espn_games, fetch_espn_teams, fetch_espn_team_stars, fetch_espn_athlete_stats,
+)
 
 router = APIRouter(prefix="/api", tags=["rankings"])
 
@@ -61,6 +63,30 @@ def get_teams(sport: Optional[str] = Query(None)):
     for sport_key in sports:
         teams.extend(fetch_espn_teams(sport_key))
     return teams
+
+
+@router.get("/teams/{team_id}/players")
+def get_team_players(team_id: int, sport: str = Query(...)):
+    """Top 10 star players for one team (ranked by season production), used by the
+    demo's per-team player follow picker."""
+    return fetch_espn_team_stars(sport.upper(), team_id, limit=10)
+
+
+@router.get("/team-reel")
+def get_team_reel(team: str = Query(...), max_games: int = 4):
+    """Real-video reel compiled from a team's previous finished games."""
+    from api.reels import build_team_season_reel
+
+    return build_team_season_reel(team, max_games=max_games)
+
+
+@router.get("/players/stats")
+def get_player_stats(sport: str = Query(...), ids: str = Query("")):
+    """Season stat lines for the given athlete ids, compiled from previous games."""
+    id_list = [int(x) for x in ids.split(",") if x.strip().isdigit()]
+    if not id_list:
+        return {}
+    return fetch_espn_athlete_stats(sport.upper(), id_list)
 
 
 @router.get("/players/{player_id}")

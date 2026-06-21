@@ -1,6 +1,6 @@
 import { useCurrentUser, useNotifications } from "../hooks/useUser";
 import { usePredictions } from "../hooks/usePredictions";
-import { useAuth } from "@clerk/clerk-react";
+import { useAuth } from "../lib/auth";
 import axios from "axios";
 import { apiPath } from "../lib/api";
 

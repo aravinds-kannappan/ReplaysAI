@@ -1,7 +1,4 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useAuth, useUser as useClerkUser } from "@clerk/clerk-react";
-import axios from "axios";
-import { apiPath } from "../lib/api";
 
 export type FavoriteTeam = {
   id: number;
@@ -11,7 +8,18 @@ export type FavoriteTeam = {
   sport: string;
 };
 
+export type FollowedPlayer = {
+  id: number;
+  name: string;
+  position?: string | null;
+  team?: string | null;
+  team_name?: string | null;
+  sport: string;
+  headshot?: string | null;
+};
+
 const TEAMS_KEY = "replaysai:teams";
+const PLAYERS_KEY = "replaysai:players";
 
 function teamKey(team: Pick<FavoriteTeam, "sport" | "abbreviation">) {
   return `${team.sport}:${team.abbreviation}`;
@@ -34,7 +42,7 @@ export function getLocalFavoriteTeams(): FavoriteTeam[] {
   }
 }
 
-function setLocalFavoriteTeams(teams: FavoriteTeam[]) {
+export function setLocalFavoriteTeams(teams: FavoriteTeam[]) {
   if (typeof window === "undefined") return;
   const unique = new Map<string, FavoriteTeam>();
   teams.forEach((team) => unique.set(teamKey(team), team));
@@ -43,41 +51,49 @@ function setLocalFavoriteTeams(teams: FavoriteTeam[]) {
   window.localStorage.setItem("replaysai:onboarded", next.length ? "true" : "false");
 }
 
-async function authFetch(getToken: () => Promise<string | null>, url: string, options: Record<string, unknown> = {}) {
-  const token = await getToken();
-  const headers = token ? { Authorization: `Bearer ${token}` } : {};
-  const res = await axios({ url: apiPath(url), headers, ...options });
-  return res.data;
+export function getLocalFollowedPlayers(): FollowedPlayer[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(PLAYERS_KEY) || "[]");
+    if (!Array.isArray(parsed)) return [];
+    const unique = new Map<number, FollowedPlayer>();
+    parsed.forEach((player) => {
+      if (player?.id && player?.name) unique.set(player.id, player);
+    });
+    return [...unique.values()];
+  } catch {
+    return [];
+  }
+}
+
+export function setLocalFollowedPlayers(players: FollowedPlayer[]) {
+  if (typeof window === "undefined") return;
+  const unique = new Map<number, FollowedPlayer>();
+  players.forEach((player) => unique.set(player.id, player));
+  window.localStorage.setItem(PLAYERS_KEY, JSON.stringify([...unique.values()]));
 }
 
 export function useCurrentUser() {
-  const { getToken, isSignedIn } = useAuth();
-  const { user: clerkUser } = useClerkUser();
   return useQuery({
-    queryKey: ["me", clerkUser?.id],
+    queryKey: ["me"],
     queryFn: async () => {
       const localTeams = getLocalFavoriteTeams();
-      let apiUser: Record<string, unknown> = {};
-      if (isSignedIn) {
-        try {
-          apiUser = await authFetch(getToken, "/api/users/me");
-        } catch {
-          apiUser = {};
-        }
-      }
+      const localPlayers = getLocalFollowedPlayers();
+      const displayName =
+        (typeof window !== "undefined" && window.localStorage.getItem("replaysai:name")) || null;
       return {
-        id: clerkUser?.id ?? "local",
-        username: clerkUser?.username ?? null,
-        display_name: clerkUser?.fullName ?? clerkUser?.firstName ?? null,
-        email: clerkUser?.primaryEmailAddress?.emailAddress ?? null,
-        avatar_url: clerkUser?.imageUrl ?? null,
+        id: "local",
+        username: null,
+        display_name: displayName,
+        email: null,
+        avatar_url: null,
         bio: null,
         total_points: 0,
         login_streak: 0,
         prediction_accuracy: 0,
         badges: [],
-        ...apiUser,
         favorite_teams: localTeams,
+        followed_players: localPlayers,
         onboarded: localTeams.length > 0,
       };
     },
@@ -87,19 +103,10 @@ export function useCurrentUser() {
 }
 
 export function useAddFavoriteTeam() {
-  const { getToken } = useAuth();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (team: FavoriteTeam) => {
       setLocalFavoriteTeams([...getLocalFavoriteTeams(), team]);
-      try {
-        await authFetch(getToken, "/api/users/me/teams", {
-          method: "post",
-          data: { team_id: team.id, sport: team.sport },
-        });
-      } catch {
-        // Local browser state is the source of truth when no database is configured.
-      }
       return { status: "ok" };
     },
     onSuccess: () => {
@@ -110,17 +117,29 @@ export function useAddFavoriteTeam() {
 }
 
 export function useRemoveFavoriteTeam() {
-  const { getToken } = useAuth();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (team: Pick<FavoriteTeam, "id" | "sport" | "abbreviation">) => {
       setLocalFavoriteTeams(getLocalFavoriteTeams().filter((item) => teamKey(item) !== teamKey(team)));
-      try {
-        await authFetch(getToken, `/api/users/me/teams/${team.id}`, { method: "delete" });
-      } catch {
-        // Local browser state is the source of truth when no database is configured.
-      }
       return { status: "ok" };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["me"] });
+      qc.invalidateQueries({ queryKey: ["feed"] });
+    },
+  });
+}
+
+export function useToggleFollowedPlayer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (player: FollowedPlayer) => {
+      const current = getLocalFollowedPlayers();
+      const exists = current.some((item) => item.id === player.id);
+      setLocalFollowedPlayers(
+        exists ? current.filter((item) => item.id !== player.id) : [...current, player],
+      );
+      return { following: !exists };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["me"] });

@@ -1,473 +1,844 @@
-import { useMemo, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
-import { useAuth } from "@clerk/clerk-react";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import ReactMarkdown from "react-markdown";
 import axios from "axios";
-import { useFeed, useRosterPlayers, useUpcomingGames } from "../hooks/usePredictions";
-import { useCurrentUser } from "../hooks/useUser";
+import {
+  useFeed, useUpcomingGames, useNews, useRosterPlayers,
+  useCreatePrediction, usePredictions, useSaveRoster, useRosters, usePlayerStats,
+  useRankings, type Standing,
+} from "../hooks/usePredictions";
+import { useCurrentUser, type FollowedPlayer } from "../hooks/useUser";
 import { useGames } from "../hooks/useGames";
 import ScoreCard from "../components/ScoreCard";
+import ReelPlayer, { type Clip } from "../components/ReelPlayer";
 import { apiPath } from "../lib/api";
 import type { Game } from "../types";
 
-type DashboardTab = "feed" | "live" | "chat" | "predictions" | "roster" | "agents";
-
-type ChatMessage = {
-  role: "user" | "assistant";
-  text: string;
-};
-
 type League = "NBA" | "NFL";
+type Tab = "dashboard" | "season" | "reels" | "extras";
 
-const TABS: { id: DashboardTab; label: string }[] = [
-  { id: "feed", label: "Feed" },
-  { id: "live", label: "Live" },
-  { id: "chat", label: "Chat" },
-  { id: "predictions", label: "Predictions" },
-  { id: "roster", label: "Roster" },
-  { id: "agents", label: "Agents" },
+const TABS: { id: Tab; label: string; path: string }[] = [
+  { id: "dashboard", label: "Dashboard", path: "/feed" },
+  { id: "season", label: "Season", path: "/season" },
+  { id: "reels", label: "Reels", path: "/reels" },
+  { id: "extras", label: "Extras", path: "/extras" },
 ];
-
-const AGENTS = [
-  { name: "Live ingest", status: "Watching schedules, scores, and play-by-play every 60 seconds." },
-  { name: "Recap writer", status: "Creates post-game summaries for final and live games." },
-  { name: "Personalizer", status: "Ranks games from your favorite teams and followed players." },
-  { name: "Forecast", status: "Prepares picks, roster outlooks, and what-if simulations." },
-];
-
-const LEAGUE_META: Record<League, { name: string; stream: string; cues: string[] }> = {
-  NBA: {
-    name: "NBA",
-    stream: "https://www.espn.com/nba/",
-    cues: ["Shot quality", "Run detector", "Star usage", "Clutch swings"],
-  },
-  NFL: {
-    name: "NFL",
-    stream: "https://www.espn.com/nfl/",
-    cues: ["Drive success", "Explosive plays", "QB pressure", "Red-zone swings"],
-  },
+const PATH_TO_TAB: Record<string, Tab> = {
+  "/feed": "dashboard", "/dashboard": "dashboard", "/season": "season", "/games": "season", "/reels": "reels",
+  "/extras": "extras", "/picks": "extras", "/predictions": "extras", "/roster": "extras", "/leaderboard": "extras",
 };
 
-function formatGameTitle(game?: Game) {
-  if (!game) return "No game selected";
-  const away = game.away_team.abbreviation || game.away_team.name || "Away";
-  const home = game.home_team.abbreviation || game.home_team.name || "Home";
-  return `${away} at ${home}`;
+function gameTitle(g?: Game) {
+  if (!g) return "";
+  return `${g.away_team.abbreviation || g.away_team.name} @ ${g.home_team.abbreviation || g.home_team.name}`;
 }
 
-function DashboardStat({ label, value }: { label: string; value: string | number }) {
+/* ── team form computed from previous games ── */
+type FormGame = { win: boolean; us: number; them: number; opp: string; id: number };
+type TeamForm = { w: number; l: number; ppg: number; oppg: number; last: FormGame[]; total: number; latestId?: number };
+function computeTeamForm(abbr: string, games: Game[]): TeamForm {
+  const finals = games.filter((g) => g.status === "final" && [g.home_team.abbreviation, g.away_team.abbreviation].includes(abbr));
+  let w = 0, l = 0, pf = 0, pa = 0;
+  const last: FormGame[] = [];
+  for (const g of finals) {
+    const home = g.home_team.abbreviation === abbr;
+    const us = home ? g.home_score : g.away_score;
+    const them = home ? g.away_score : g.home_score;
+    if (us == null || them == null) continue;
+    if (us > them) w++;
+    else l++;
+    pf += us; pa += them;
+    last.push({ win: us > them, us, them, opp: home ? g.away_team.abbreviation! : g.home_team.abbreviation!, id: g.id });
+  }
+  const n = w + l;
+  return { w, l, ppg: n ? Math.round(pf / n) : 0, oppg: n ? Math.round(pa / n) : 0, last: last.slice(0, 8), total: n, latestId: finals[0]?.id };
+}
+
+function clampNum(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function askAssistant(prompt: string) {
+  window.dispatchEvent(new CustomEvent("replaysai:assistant-prompt", { detail: { prompt } }));
+}
+
+/* ── lightweight SVG points trend ── */
+function PointsTrend({ data }: { data: FormGame[] }) {
+  const pts = [...data].reverse();
+  if (pts.length < 2) return <p className="empty-state" style={{ padding: 0, fontSize: "0.8rem" }}>Not enough games for a trend yet.</p>;
+  const all = pts.flatMap((g) => [g.us, g.them]);
+  const max = Math.max(...all), min = Math.min(...all);
+  const W = 280, H = 70, n = pts.length;
+  const x = (i: number) => (i / (n - 1)) * W;
+  const y = (v: number) => H - ((v - min) / (max - min || 1)) * (H - 8) - 4;
+  const path = (k: "us" | "them") => pts.map((g, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${y(g[k]).toFixed(1)}`).join(" ");
   return (
-    <div className="dashboard-stat">
-      <strong>{value}</strong>
-      <span>{label}</span>
-    </div>
+    <svg viewBox={`0 0 ${W} ${H}`} className="trend" preserveAspectRatio="none">
+      <path d={path("them")} className="t-them" /><path d={path("us")} className="t-us" />
+      {pts.map((g, i) => <circle key={i} cx={x(i)} cy={y(g.us)} r="2.6" className="t-dot" />)}
+    </svg>
   );
 }
 
-function AgentPanel() {
+/* ── AI briefing ── */
+function Briefing({ league, teams, players, games }: { league: League; teams: { name: string; abbreviation: string; sport: string }[]; players: FollowedPlayer[]; games: Game[] }) {
+  const leagueTeams = teams.filter((t) => t.sport === league);
+  const { data: statMap = {} } = usePlayerStats(league, players.filter((p) => p.sport === league).map((p) => p.id));
+  const payload = useMemo(() => ({
+    sport: league,
+    teams: leagueTeams.map((t) => {
+      const f = computeTeamForm(t.abbreviation, games);
+      return { name: t.name, record: `${f.w}-${f.l}`, recent: f.last.slice(0, 4).map((r) => `${r.win ? "W" : "L"} ${r.us}-${r.them} vs ${r.opp}`) };
+    }),
+    players: players.filter((p) => p.sport === league).map((p) => ({ name: p.name, line: (statMap[String(p.id)]?.line ?? []).map((s) => `${s.value} ${s.label}`).join(", ") || `${p.team} ${p.position}` })),
+  }), [league, leagueTeams, players, games, statMap]);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["briefing", league, JSON.stringify(payload)],
+    queryFn: () => axios.post(apiPath("/api/briefing"), payload).then((r) => r.data),
+    enabled: leagueTeams.length > 0,
+    staleTime: 300_000,
+  });
+
+  if (leagueTeams.length === 0) return null;
   return (
-    <div className="agent-panel">
-      {AGENTS.map((agent) => (
-        <div key={agent.name} className="agent-status-card">
-          <span className="agent-light" />
-          <div>
-            <strong>{agent.name}</strong>
-            <p>{agent.status}</p>
-          </div>
+    <section className="dash-panel briefing">
+      <div className="panel-heading"><div><span>Your AI briefing · {league}</span><h2>Where your teams stand</h2></div></div>
+      {isLoading ? <p className="loading-text">Compiling your briefing…</p> : (
+        <div className="recap-content"><ReactMarkdown>{data?.content || ""}</ReactMarkdown></div>
+      )}
+    </section>
+  );
+}
+
+/* ── What-ifs for the latest game ── */
+function WhatIf({ gameId, title }: { gameId?: number; title: string }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["whatif", gameId],
+    queryFn: () => axios.get(apiPath(`/api/games/${gameId}/whatif`)).then((r) => r.data),
+    enabled: !!gameId,
+    staleTime: 300_000,
+  });
+  if (!gameId) return null;
+  return (
+    <section className="dash-panel">
+      <div className="panel-heading"><div><span>What if…</span><h2>{title}</h2></div></div>
+      {isLoading ? <p className="loading-text">Running scenarios…</p> : <div className="recap-content"><ReactMarkdown>{data?.scenarios || ""}</ReactMarkdown></div>}
+    </section>
+  );
+}
+
+/* ── Season shape (charts) ── */
+function SeasonShape({ league, teams, games }: { league: League; teams: { name: string; abbreviation: string; sport: string }[]; games: Game[] }) {
+  const leagueTeams = teams.filter((t) => t.sport === league);
+  if (leagueTeams.length === 0) return null;
+  return (
+    <section className="dash-panel">
+      <div className="panel-heading"><div><span>Season shape · from previous games</span><h2>Form & scoring</h2></div></div>
+      <div className="shape-grid">
+        {leagueTeams.map((t) => {
+          const f = computeTeamForm(t.abbreviation, games);
+          return (
+            <div key={t.abbreviation} className="shape-card">
+              <div className="shape-head"><strong>{t.abbreviation}</strong><span>{t.name}</span><b>{f.w}-{f.l}</b></div>
+              <PointsTrend data={f.last} />
+              <div className="shape-legend"><span className="lg us">scored {f.ppg}</span><span className="lg them">allowed {f.oppg}</span></div>
+              <div className="stat-form">
+                {f.last.map((r, i) => <Link key={i} to={`/game/${r.id}`} className={`form-dot ${r.win ? "w" : "l"}`} title={`${r.win ? "W" : "L"} ${r.us}-${r.them} vs ${r.opp}`}>{r.win ? "W" : "L"}</Link>)}
+                {f.total === 0 && <span className="empty-state" style={{ padding: 0 }}>No finished games yet.</span>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+/* ── Stats (teams + players) ── */
+function StatsBlock({ league, players }: { league: League; players: FollowedPlayer[] }) {
+  const leaguePlayers = players.filter((p) => p.sport === league);
+  const { data: statMap = {} } = usePlayerStats(league, leaguePlayers.map((p) => p.id));
+  if (leaguePlayers.length === 0) return null;
+  return (
+    <section className="dash-panel">
+      <div className="panel-heading"><div><span>Followed players · season averages</span><h2>Player stats</h2></div></div>
+      <div className="stat-cards">
+        {leaguePlayers.map((p) => {
+          const s = statMap[String(p.id)];
+          return (
+            <div key={p.id} className="stat-card player">
+              <div className="stat-card-head"><strong>{p.name}</strong><span>{p.team || "FA"} · {p.position || "—"}</span></div>
+              {s && s.line.length > 0 ? (
+                <div className="player-line">{s.line.map((stat) => <div key={stat.label} className="player-stat"><b>{stat.value}</b><span>{stat.label}</span></div>)}</div>
+              ) : <p className="empty-state" style={{ padding: "6px 0", fontSize: "0.82rem" }}>Season averages not published for this player.</p>}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function CommandHero({
+  league,
+  teams,
+  players,
+  games,
+  liveCount,
+}: {
+  league: League;
+  teams: { name: string; abbreviation: string; sport: string }[];
+  players: FollowedPlayer[];
+  games: Game[];
+  liveCount: number;
+}) {
+  const leagueTeams = teams.filter((team) => team.sport === league);
+  const leaguePlayers = players.filter((player) => player.sport === league);
+  const finals = games.filter((game) => game.status === "final").length;
+  const latest = games[0];
+  return (
+    <section className="command-hero">
+      <div className="command-copy">
+        <span className="dashboard-kicker">Personalized feed</span>
+        <h2>{leagueTeams.length ? leagueTeams.map((team) => team.abbreviation).join(" + ") : league}</h2>
+        <p>
+          Games, stats, player watch, reels, news, picks, and rosters filtered to your teams and stars.
+        </p>
+        <div className="command-chips">
+          {leagueTeams.slice(0, 5).map((team) => <span key={team.abbreviation}>{team.abbreviation}</span>)}
+          {leaguePlayers.slice(0, 5).map((player) => <span key={player.id}>{player.name}</span>)}
+          {!leagueTeams.length && <Link to="/demo">Pick teams and star players</Link>}
         </div>
-      ))}
-    </div>
+      </div>
+      <div className="command-metrics">
+        <div><strong>{leagueTeams.length}</strong><span>Teams tracked</span></div>
+        <div><strong>{leaguePlayers.length}</strong><span>Stars watched</span></div>
+        <div><strong>{finals}</strong><span>Historical games</span></div>
+        <div><strong>{liveCount}</strong><span>Live windows</span></div>
+      </div>
+      {latest && (
+        <Link to={`/game/${latest.id}`} className="command-latest">
+          <span>Latest game</span>
+          <strong>{gameTitle(latest)}</strong>
+          <small>{latest.status === "live" ? "Live now" : `${latest.away_score ?? "-"}-${latest.home_score ?? "-"}`}</small>
+        </Link>
+      )}
+    </section>
   );
 }
 
-function PersonalizationLoader({ teams }: { teams: { abbreviation: string; sport: string; name: string }[] }) {
+function PredictionLab({
+  league,
+  teams,
+  games,
+}: {
+  league: League;
+  teams: { name: string; abbreviation: string; sport: string }[];
+  games: Game[];
+}) {
+  const leagueTeams = teams.filter((team) => team.sport === league);
+  if (!leagueTeams.length) return null;
   return (
-    <div className="personalization-loader">
-      <div>
-        <span>Agents retrieving context</span>
-        <h2>Your teams are activated</h2>
-        <p>ReplaysAI is ready to pull schedules, players, reels, news, predictions, and matchup context for your selected teams.</p>
+    <section className="dash-panel prediction-lab">
+      <div className="panel-heading">
+        <div><span>Prediction desk</span><h2>Season outlook</h2></div>
+        <button className="btn-ghost" onClick={() => askAssistant(`Explain the ${league} prediction model for my teams in detail.`)}>Ask why</button>
       </div>
-      <div className="team-activation-list">
-        {teams.map((team) => (
-          <div key={`${team.sport}-${team.abbreviation}`}>
-            <strong>{team.abbreviation}</strong>
-            <span>{team.name}</span>
+      <div className="model-grid">
+        {leagueTeams.map((team) => {
+          const form = computeTeamForm(team.abbreviation, games);
+          const scoringEdge = form.ppg - form.oppg;
+          const confidence = clampNum(50 + scoringEdge * 2 + (form.w - form.l) * 3, 12, 88);
+          const label = confidence >= 65 ? "Positive trend" : confidence >= 48 ? "Volatile" : "Needs response";
+          return (
+            <div key={team.abbreviation} className="model-card">
+              <div className="model-top"><strong>{team.abbreviation}</strong><span>{label}</span></div>
+              <div className="model-ring" style={{ ["--p" as string]: `${confidence}%` }}><b>{Math.round(confidence)}%</b><span>confidence</span></div>
+              <p>
+                Record sample {form.w}-{form.l}. Scoring profile: {form.ppg || "-"} for,
+                {` ${form.oppg || "-"} allowed`}. The model weights recent wins, point margin,
+                and score stability from the games available in the ESPN feed.
+              </p>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function DemoLeaderboardPanel({ league }: { league: League }) {
+  const predictions = useMemo(() => {
+    try { return JSON.parse(window.localStorage.getItem("replaysai:predictions") || "[]") as { game_id: number }[]; }
+    catch { return []; }
+  }, []);
+  const rosters = useMemo(() => {
+    try { return JSON.parse(window.localStorage.getItem("replaysai:rosters") || "[]") as { player_ids?: number[] }[]; }
+    catch { return []; }
+  }, []);
+  const userPoints = predictions.length * 10 + rosters.reduce((sum, roster) => sum + (roster.player_ids?.length ?? 0) * 3, 0);
+  const rows = [
+    { name: "You", detail: `${predictions.length} picks · ${rosters.length} rosters`, points: userPoints, me: true },
+    { name: "Film Room", detail: "11 correct · 3 streak", points: 410 },
+    { name: "Fourth Quarter", detail: "8 correct · 5 badges", points: 355 },
+    { name: "Deep Cut", detail: "7 correct · reel master", points: 295 },
+  ].sort((a, b) => b.points - a.points);
+  return (
+    <section className="dash-panel sleeper-board">
+      <div className="panel-heading"><div><span>{league} picks ladder</span><h2>Local leaderboard preview</h2></div></div>
+      <div className="sleep-table">
+        {rows.map((row, index) => (
+          <div key={row.name} className={`sleep-row ${row.me ? "me" : ""}`}>
+            <b>{index + 1}</b>
+            <div><strong>{row.name}</strong><span>{row.detail}</span></div>
+            <em>{row.points}</em>
           </div>
         ))}
       </div>
-      <div className="agent-panel">
-        {["Schedule scan", "Player graph", "News rails", "Reel queue"].map((job) => (
-          <div key={job} className="agent-status-card"><span className="agent-light" /><div><strong>{job}</strong><p>Queued for this team graph.</p></div></div>
+      <p className="panel-note">This previews the Sleeper-style experience locally. A real global ladder needs persistent server storage before launch.</p>
+    </section>
+  );
+}
+
+/* ── Tailored news ── */
+function NewsBlock({ league, teams, players, embedded }: { league: League; teams: { name: string; abbreviation: string; sport: string }[]; players: FollowedPlayer[]; embedded?: boolean }) {
+  const leagueTeams = teams.filter((t) => t.sport === league);
+  const leaguePlayers = players.filter((p) => p.sport === league);
+  const keywords = useMemo(() => {
+    const k: string[] = [];
+    leagueTeams.forEach((t) => { k.push(t.name.split(" ").slice(-1)[0]); k.push(t.abbreviation); });
+    leaguePlayers.forEach((p) => { k.push(p.name); });
+    return [...new Set(k.filter(Boolean))];
+  }, [leagueTeams, leaguePlayers]);
+  const { data: news = [], isLoading } = useNews(league, keywords);
+
+  const empty = keywords.length === 0
+    ? <p className="empty-state" style={{ padding: "8px 0", fontSize: "0.82rem" }}>Follow teams/players for a tailored feed — never general news. <Link to="/demo">Pick →</Link></p>
+    : isLoading ? <p className="loading-text">Finding your stories…</p>
+    : news.length === 0 ? <p className="empty-state" style={{ padding: "8px 0", fontSize: "0.82rem" }}>No recent stories about your {league} picks.</p> : null;
+
+  if (embedded) {
+    return (
+      <div className="rail-news">
+        {empty}
+        {news.slice(0, 8).map((a) => (
+          <a key={a.id} className="rail-news-item" href={a.link || "#"} target="_blank" rel="noreferrer">
+            <strong>{a.headline}</strong>{a.published && <span>{new Date(a.published).toLocaleDateString()}</span>}
+          </a>
         ))}
       </div>
-      <Link to="/onboarding" className="btn-ghost">Edit teams</Link>
+    );
+  }
+  return (
+    <section className="dash-panel">
+      <div className="panel-heading"><div><span>Tailored news · only your teams & players</span><h2>News feed</h2></div></div>
+      {empty}
+      <div className="news-grid">
+        {news.map((a) => (
+          <a key={a.id} className="news-card" href={a.link || "#"} target="_blank" rel="noreferrer">
+            {a.image && <div className="news-thumb" style={{ backgroundImage: `url(${a.image})` }} />}
+            <div className="news-body"><span className="news-sport">{a.sport}</span><strong>{a.headline}</strong><p>{a.description}</p>{a.published && <small>{new Date(a.published).toLocaleDateString()}</small>}</div>
+          </a>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/* The Anthropic assistant lives in the bottom-right "AI" popup (FloatingAssistant). */
+
+/* ── Reels tab: CV building viz + game talk + tiers + Q&A director ── */
+function CvBuildingBanner() {
+  return (
+    <div className="cv-build">
+      <div className="cv-build-left"><span className="cv-pulse" /><div><strong>CV agent</strong><span>scanning footage · detecting moments</span></div></div>
+      <div className="cv-build-bars">{Array.from({ length: 22 }).map((_, i) => <i key={i} style={{ animationDelay: `${i * 0.06}s` }} />)}</div>
+      <div className="cv-build-right"><strong>Reel agent</strong><span>assembling clips</span></div>
     </div>
   );
 }
 
-function AssistantChat({ games, league }: { games: Game[]; league: League }) {
-  const { getToken } = useAuth();
+const REEL_PROMPTS = [
+  ["Whole game · 2 min", "Quick 2 minute rundown of the whole game"],
+  ["4th quarter only", "Only the 4th quarter"],
+  ["Every dunk", "Every dunk in the game"],
+  ["10 min deep cut", "The most detailed 10 minute reel of the entire game"],
+];
+function ReelDirector({ gameId, onReel }: { gameId: number; onReel: (p: { label: string; clips: Clip[]; voiceScript?: string; voiceSource?: string }) => void }) {
   const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      role: "assistant",
-      text: "Ask about your teams, a live game, a player trend, or a roster what-if. I will use the selected league and loaded dashboard games first.",
-    },
+  const [log, setLog] = useState<{ role: "user" | "assistant"; text: string }[]>([
+    { role: "assistant", text: "I direct the reel. Tell me a player, a quarter (e.g. Q4), a play type (fouls, dunks, threes), or the whole game — and 2, 5, or 10 minutes. Ask me anything about the game too." },
   ]);
-
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    const question = draft.trim();
-    if (!question) return;
-    setDraft("");
-    const nextMessages = [...messages, { role: "user" as const, text: question }];
-    setMessages(nextMessages);
-    setLoading(true);
+  async function send(prompt: string) {
+    if (!prompt || loading) return;
+    const history = [...log, { role: "user" as const, text: prompt }];
+    setLog(history); setLoading(true);
     try {
-      const token = await getToken();
-      const featured = games[0];
-      const res = await axios.post(
-        apiPath("/api/chat"),
-        {
-          message: question,
-          messages: nextMessages,
-          context: JSON.stringify({
-            route: "/feed",
-            league,
-            featured_game: featured ? {
-              id: featured.id,
-              title: formatGameTitle(featured),
-              status: featured.status,
-              score: `${featured.away_score ?? 0}-${featured.home_score ?? 0}`,
-            } : null,
-          }),
-        },
-        { headers: token ? { Authorization: `Bearer ${token}` } : {} },
-      );
-      setMessages((prev) => [...prev, { role: "assistant", text: res.data.reply }]);
-    } catch {
-      setMessages((prev) => [...prev, { role: "assistant", text: "I could not reach the assistant service yet. Check the backend and AI provider environment." }]);
-    } finally {
-      setLoading(false);
-    }
+      const res = await axios.post(apiPath(`/api/games/${gameId}/reels/generate`), { prompt, messages: history });
+      if (res.data.action === "ask") setLog((p) => [...p, { role: "assistant", text: res.data.question }]);
+      else {
+        onReel({
+          label: res.data.reel.title,
+          clips: res.data.reel.clips,
+          voiceScript: res.data.reel.voice_script,
+          voiceSource: res.data.reel.voice_source,
+        });
+        setLog((p) => [...p, { role: "assistant", text: `${res.data.note}. Voice script is attached to the reel.` }]);
+      }
+    } catch { setLog((p) => [...p, { role: "assistant", text: "No highlight video is available for this game yet." }]); }
+    finally { setLoading(false); }
+  }
+  return (
+    <div className="reel-director">
+      <div className="panel-heading"><div><span>Reel director & Q&A</span><h2>Build a reel or ask about the game</h2></div></div>
+      <div className="chat-log">{log.map((m, i) => <div key={i} className={`chat-bubble ${m.role}`}>{m.text}</div>)}</div>
+      <div className="quick-prompts">{REEL_PROMPTS.map(([l, p]) => <button key={l} disabled={loading} onClick={() => void send(p)}>{l}</button>)}</div>
+      <form className="chat-form" onSubmit={(e) => { e.preventDefault(); const p = draft.trim(); setDraft(""); void send(p); }}><input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="e.g. only Brunson's 4th quarter…" /><button type="submit" disabled={loading}>{loading ? "…" : "Send"}</button></form>
+    </div>
+  );
+}
+
+type Cut = {
+  label: string;
+  blurb: string;
+  clip_count: number;
+  duration_seconds: number;
+  clips: Clip[];
+  explainer: string;
+  voice_script?: string;
+  voice_source?: string;
+};
+
+function VoiceScriptPanel({ script, source }: { script?: string; source?: string }) {
+  if (!script) return null;
+  return (
+    <details className="reel-voice-panel">
+      <summary>
+        🔊 Narration transcript
+        <em>{source === "anthropic" ? "AI voice script" : "voice script"}</em>
+      </summary>
+      <div className="voice-script-content"><ReactMarkdown>{script}</ReactMarkdown></div>
+    </details>
+  );
+}
+
+function ReelsPanel({ games, league }: { games: Game[]; league: League }) {
+  // A game is reel-able if it has been played. ESPN sometimes mislabels finished
+  // games as "scheduled", so we also accept any game that already has scores —
+  // this is what surfaces past games for the user's teams in the offseason.
+  const playable = useMemo(
+    () => games.filter((g) => (g.away_score != null && g.home_score != null) || g.status === "live"),
+    [games],
+  );
+  const [gameId, setGameId] = useState<number | null>(null);
+  const [playlist, setPlaylist] = useState<{ label: string; clips: Clip[]; voiceScript?: string; voiceSource?: string } | null>(null);
+  const [activeCut, setActiveCut] = useState<string | null>(null);
+  useEffect(() => {
+    if ((gameId !== null && playable.some((g) => g.id === gameId)) || !playable[0]) return;
+    const id = window.setTimeout(() => {
+      setGameId(playable[0].id);
+      setPlaylist(null);
+      setActiveCut(null);
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [playable, gameId]);
+  const game = games.find((g) => g.id === gameId);
+  const { data: reelData, isLoading } = useQuery({ queryKey: ["reel-cuts", gameId], queryFn: () => axios.get(apiPath(`/api/games/${gameId}/reels`)).then((r) => r.data), enabled: !!gameId, staleTime: 300_000 });
+  const cuts = (reelData?.cuts ?? []) as Cut[];
+  const noVideo = reelData && (reelData.clip_count ?? 0) === 0;
+  const shownCut = cuts.find((c) => c.label === activeCut) ?? cuts[0];
+
+  function playCut(cut: Cut) {
+    setActiveCut(cut.label);
+    if (cut.clips.length) setPlaylist({
+      label: `${gameTitle(game)} · ${cut.label}`,
+      clips: cut.clips,
+      voiceScript: cut.voice_script,
+      voiceSource: cut.voice_source,
+    });
+    else setPlaylist(null);
   }
 
   return (
-    <div className="chat-shell">
-      <div className="chat-log">
-        {messages.map((message, index) => (
-          <div key={`${message.role}-${index}`} className={`chat-bubble ${message.role}`}>
-            {message.text}
-          </div>
+    <section className="dash-panel">
+      <div className="panel-heading"><div><span>Game explainer · {league}</span><h2>Reel studio{game ? ` — ${gameTitle(game)}` : ""}</h2></div>
+        {gameId && <Link to={`/reel/${gameId}`} className="btn-primary">Open narrated reel →</Link>}</div>
+      <CvBuildingBanner />
+      <p className="reel-strip-label">Past games for your teams — pick one to build a narrated reel:</p>
+      <div className="reel-game-strip">
+        {playable.slice(0, 18).map((g) => (
+          <button key={g.id} className={`reel-game-chip ${g.id === gameId ? "on" : ""}`} onClick={() => { setGameId(g.id); setPlaylist(null); setActiveCut(null); }}>
+            <strong>{gameTitle(g)}</strong>
+            <span>{g.status === "live" ? "LIVE" : `${g.away_score ?? "—"}-${g.home_score ?? "—"}`}{g.game_date ? ` · ${new Date(g.game_date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : ""}</span>
+          </button>
         ))}
+        {playable.length === 0 && <p className="empty-state">No past {league} games for your teams yet. <Link to="/demo">Pick teams →</Link></p>}
       </div>
-      <form className="chat-form" onSubmit={submit}>
-        <input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder="Ask what happened, what matters next, or who to roster..."
-        />
-        <button type="submit" disabled={loading}>{loading ? "..." : "Send"}</button>
-      </form>
-    </div>
-  );
-}
 
-function LeagueSwitch({ league, onChange }: { league: League; onChange: (league: League) => void }) {
-  return (
-    <div className="league-switch" aria-label="League switch">
-      {(["NBA", "NFL"] as League[]).map((item) => (
-        <button type="button" key={item} className={league === item ? "active" : ""} onClick={() => onChange(item)}>
-          {item}
-        </button>
-      ))}
-    </div>
-  );
-}
+      {isLoading && <p className="loading-text">CV agent reading the game…</p>}
 
-function SignalBoard({ league }: { league: League }) {
-  return (
-    <div className="signal-board">
-      {LEAGUE_META[league].cues.map((cue, index) => (
-        <div key={cue} className="signal-row">
-          <span>{String(index + 1).padStart(2, "0")}</span>
-          <strong>{cue}</strong>
-          <i style={{ width: `${68 + index * 7}%` }} />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-export default function Feed() {
-  const [activeTab, setActiveTab] = useState<DashboardTab>("feed");
-  const [league, setLeague] = useState<League>("NBA");
-  const { data: user } = useCurrentUser();
-  const { data: feed, isLoading } = useFeed();
-  const { data: liveGames } = useGames({ sport: league, status: "live", limit: 12 });
-  const { data: upcomingGames = [] } = useUpcomingGames();
-  const { data: rosterPlayers = [] } = useRosterPlayers(league);
-
-  const games: Game[] = (feed?.games ?? []).filter((game: Game) => game.sport === league);
-  const onboarded = feed?.onboarded ?? false;
-  const favoriteCount = user?.favorite_teams?.length ?? 0;
-  const favoriteTeams = (user?.favorite_teams ?? []) as { abbreviation: string; sport: string; name: string }[];
-  const topRosterPlayers = rosterPlayers.slice(0, 5) as {
-    id: number;
-    name: string;
-    team: string | null;
-    position: string | null;
-    impact_score: number;
-  }[];
-
-  const postGameSummaries = useMemo(
-    () => games.filter((game) => game.status === "final").slice(0, 3),
-    [games],
-  );
-
-  const live = liveGames?.games ?? [];
-  const leagueUpcoming = upcomingGames.filter((game: { sport: string }) => game.sport === league);
-  const featuredLive = live[0];
-
-  return (
-    <div className={`app-shell league-${league.toLowerCase()}`}>
-      <aside className="app-sidebar">
-        <Link to="/" className="sidebar-brand">ReplaysAI</Link>
-        <nav className="sidebar-nav">
-          {TABS.map((tab) => (
-            <button
-              type="button"
-              key={tab.id}
-              className={activeTab === tab.id ? "active" : ""}
-              onClick={() => setActiveTab(tab.id)}
-            >
-              {tab.label}
+      {/* Tiered explainer — like a NotebookLM deep dive, 2/5/10 min depth */}
+      {cuts.length > 0 && (
+        <div className="reel-tiers">
+          {cuts.map((cut) => (
+            <button key={cut.label} className={`reel-tier ${shownCut?.label === cut.label ? "on" : ""}`} onClick={() => playCut(cut)}>
+              <strong>{cut.label}</strong><span>{cut.blurb}</span>
+              <small>{cut.clip_count ? `${cut.clip_count} clips · ` : ""}explains the whole game</small>
+              <span className="reel-tier-play">▶ {cut.clips.length ? "Play + explain" : "Explain"}</span>
             </button>
           ))}
-        </nav>
-        <div className="sidebar-card">
-          <span>Personalization</span>
-          <strong>{onboarded ? `${favoriteCount} teams active` : "Needs setup"}</strong>
-            <Link to="/onboarding">Edit teams</Link>
         </div>
-      </aside>
+      )}
 
-      <main className="dashboard-main">
-        <header className="dashboard-header">
-          <div>
-            <p className="dashboard-kicker">Command center</p>
-            <h1>{user?.display_name || user?.username || `${league} dashboard`}</h1>
-            <p>
-              Personalized {league} feed, live games, post-game summaries, picks, chat, and roster forecasts
-              in one place.
-            </p>
-          </div>
-          <div className="dashboard-actions">
-            <LeagueSwitch league={league} onChange={setLeague} />
-            <div className="dashboard-stats">
-              <DashboardStat label="Points" value={user?.total_points ?? 0} />
-              <DashboardStat label="Streak" value={user?.login_streak ?? 0} />
-              <DashboardStat label="Live" value={live.length} />
-            </div>
-          </div>
-        </header>
+      {playlist && playlist.clips.length > 0 && <ReelPlayer playlist={playlist} onClose={() => setPlaylist(null)} />}
+      {noVideo && !isLoading && <p className="panel-note">No highlight video for this game — here's the agent's explainer instead.</p>}
 
-        {!onboarded && (
-          <div className="setup-banner">
-            <div>
-              <strong>Choose favorite teams to unlock personalization.</strong>
-              <p>Your feed, summaries, predictions, and roster suggestions will rank around them.</p>
-            </div>
-            <Link to="/onboarding" className="btn-primary">Choose teams</Link>
+      {shownCut && (
+        <div className="game-talk">
+          <div className="panel-heading">
+            <div><span>Game deep dive · {shownCut.label}</span><h2>What happened in this game</h2></div>
           </div>
-        )}
-        {onboarded && (
-          <div className="setup-banner">
-            <div>
-              <strong>{favoriteCount} teams active.</strong>
-              <p>Agents will use these teams to rank games, reels, predictions, and roster recommendations.</p>
-            </div>
-            <Link to="/onboarding" className="btn-primary">Edit teams</Link>
-          </div>
-        )}
+          <div className="recap-content"><ReactMarkdown>{shownCut.explainer || ""}</ReactMarkdown></div>
+          <VoiceScriptPanel script={shownCut.voice_script} source={shownCut.voice_source} />
+        </div>
+      )}
 
-        {activeTab === "feed" && (
-          <section className="dashboard-grid">
-            <div className="dashboard-panel span-2">
-              <div className="panel-heading">
-                <div>
-                  <span>{onboarded ? `${league} for you` : `${league} recent games`}</span>
-                  <h2>{onboarded ? "Personalized feed" : "Start with recent games"}</h2>
-                </div>
-                <Link to="/predictions">Make picks</Link>
-              </div>
-              {isLoading && <p className="loading-text">Loading games...</p>}
-              {!isLoading && games.length === 0 && (
-                onboarded ? <PersonalizationLoader teams={favoriteTeams} /> : <p className="empty-state">No games returned yet. You can still use every tab, then choose teams later from Edit teams.</p>
-              )}
-              <div className="games-grid compact">
-                {games.slice(0, 6).map((game) => <ScoreCard key={game.id} game={game} />)}
-              </div>
-            </div>
+      {playlist?.voiceScript && <VoiceScriptPanel script={playlist.voiceScript} source={playlist.voiceSource} />}
 
-            <div className="dashboard-panel">
-              <div className="panel-heading">
-                <div>
-                  <span>Post-game</span>
-                  <h2>Summary queue</h2>
-                </div>
-              </div>
-              <div className="summary-list">
-                {postGameSummaries.length === 0 && <p className="empty-state">No final games in your feed yet.</p>}
-                {postGameSummaries.map((game) => (
-                  <Link to={`/game/${game.id}`} key={game.id} className="summary-row">
-                    <strong>{formatGameTitle(game)}</strong>
-                    <span>Generate recap and fan view</span>
-                  </Link>
+      {game && <ReelDirector key={game.id} gameId={game.id} onReel={(p) => { setPlaylist(p); setActiveCut(null); }} />}
+    </section>
+  );
+}
+
+/* ── Extras: picks / roster / leaders ── */
+function PicksPanel({ league }: { league: League }) {
+  const { data: upcoming = [] } = useUpcomingGames() as { data?: { id: number; sport: string; game_date: string | null; home_team: { id: number; name: string | null }; away_team: { id: number; name: string | null } }[] };
+  const { data: predictions = [] } = usePredictions() as { data?: { game_id: number; predicted_winner_team_id: number }[] };
+  const create = useCreatePrediction();
+  const games = upcoming.filter((g) => g.sport === league);
+  const pickedFor = new Map(predictions.map((p) => [p.game_id, p.predicted_winner_team_id]));
+  return (
+    <section className="dash-panel">
+      <div className="panel-heading"><div><span>{league} picks</span><h2>Lock your picks</h2></div></div>
+      <div className="matchup-board">
+        {games.length === 0 && <p className="empty-state">No scheduled {league} games to pick right now.</p>}
+        {games.map((game) => {
+          const picked = pickedFor.get(game.id);
+          return (
+            <div key={game.id} className="matchup-card">
+              <div className="matchup-top"><span>{game.game_date ? new Date(game.game_date).toLocaleString() : "TBD"}</span><b>{picked ? "Locked ✓" : "Open"}</b></div>
+              <div className="matchup-teams">
+                {[game.away_team, game.home_team].map((team) => (
+                  <button key={team.id} className={picked === team.id ? "selected" : ""} disabled={!!picked} onClick={() => create.mutate({ game_id: game.id, predicted_winner_team_id: team.id! })}>
+                    <strong>{team.name}</strong><span>{team.id === game.away_team.id ? "Away" : "Home"}</span>
+                  </button>
                 ))}
               </div>
             </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+function RosterPanel({ league }: { league: League }) {
+  const { data: players = [] } = useRosterPlayers(league) as { data?: { id: number; name: string; team: string | null; position: string | null; impact_score: number }[] };
+  const { data: rosters = [] } = useRosters() as { data?: { sport: string; player_ids: number[] }[] };
+  const save = useSaveRoster();
+  const saved = rosters.find((r) => r.sport === league.toUpperCase());
+  const [picked, setPicked] = useState<Set<number>>(new Set());
+  const savedPlayerIds = useMemo(() => saved?.player_ids ?? [], [saved?.player_ids]);
+  const savedPlayerKey = savedPlayerIds.join(",");
+  useEffect(() => {
+    const id = window.setTimeout(() => setPicked(new Set(savedPlayerIds)), 0);
+    return () => window.clearTimeout(id);
+  }, [league, savedPlayerKey, savedPlayerIds]);
+  function toggle(id: number) {
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else if (next.size < 8) next.add(id);
+      return next;
+    });
+  }
+  return (
+    <section className="dash-panel">
+      <div className="panel-heading"><div><span>{league} fantasy</span><h2>Roster ({picked.size}/8)</h2></div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Link to="/dream-team" className="btn-ghost">Championship sim →</Link>
+          <button className="btn-primary" disabled={picked.size === 0 || save.isPending} onClick={() => save.mutate({ sport: league, player_ids: [...picked] })}>{save.isPending ? "Saving…" : saved ? "Update" : "Save"}</button>
+        </div></div>
+      <div className="roster-pool">
+        {players.length === 0 && <p className="empty-state">No {league} players yet.</p>}
+        {[...players].sort((a, b) => b.impact_score - a.impact_score).slice(0, 30).map((p) => (
+          <button key={p.id} className={`roster-player ${picked.has(p.id) ? "on" : ""}`} onClick={() => toggle(p.id)}>
+            <div><strong>{p.name}</strong><span>{p.team || "FA"} · {p.position || "UTIL"}</span></div><b>{p.impact_score}</b>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
 
-            <div className="dashboard-panel">
-              <div className="panel-heading">
-                <div>
-                  <span>Agents</span>
-                  <h2>Today</h2>
-                </div>
+/* ── ESPN-style live scores ticker ── */
+function ScoresTicker({ sport }: { sport: League }) {
+  const { data } = useGames({ sport, limit: 18 });
+  const all = (data?.games ?? []) as Game[];
+  const games = all.filter((g) => g.status !== "scheduled").slice(0, 14);
+  if (games.length === 0) return null;
+  const row = [...games, ...games];
+  return (
+    <div className="score-ticker">
+      <span className="ticker-flag">{sport} SCORES</span>
+      <div className="ticker-vp"><div className="ticker-row">
+        {row.map((g, i) => (
+          <Link key={i} to={`/game/${g.id}`} className="tick">
+            <span className={`tick-dot ${g.status === "live" ? "live" : ""}`} />
+            <b>{g.away_team.abbreviation}</b> {g.away_score ?? "—"} · {g.home_score ?? "—"} <b>{g.home_team.abbreviation}</b>
+            <i>{g.status === "live" ? "LIVE" : "F"}</i>
+          </Link>
+        ))}
+      </div></div>
+    </div>
+  );
+}
+
+/* ── Standings rail ── */
+function StandingsRail({ sport, favs }: { sport: League; favs: Set<string> }) {
+  const { data } = useRankings(sport);
+  const standings = ((data?.[sport] ?? []) as Standing[]).slice(0, 10);
+  return (
+    <div className="rail-card">
+      <div className="rail-head"><span>{sport} standings</span></div>
+      {standings.length === 0 ? <p className="empty-state" style={{ padding: "8px 0", fontSize: "0.8rem" }}>Loading…</p> : (
+        <table className="rail-table"><tbody>
+          {standings.map((s, i) => (
+            <tr key={s.team_id} className={favs.has(s.abbreviation) ? "fav" : ""}>
+              <td className="r-rank">{i + 1}</td><td className="r-team">{s.abbreviation}</td>
+              <td className="r-rec">{s.wins}-{s.losses}</td><td className="r-pct">{(s.win_pct * 100).toFixed(0)}%</td>
+            </tr>
+          ))}
+        </tbody></table>
+      )}
+    </div>
+  );
+}
+
+/* ── League leaders rail ── */
+function LeadersRail({ sport }: { sport: League }) {
+  const { data: players = [] } = useRosterPlayers(sport) as { data?: { id: number; name: string; team: string | null; position: string | null; impact_score: number }[] };
+  const top = players.slice(0, 8);
+  return (
+    <div className="rail-card">
+      <div className="rail-head"><span>{sport} leaders</span></div>
+      {top.length === 0 ? <p className="empty-state" style={{ padding: "8px 0", fontSize: "0.8rem" }}>Loading…</p> : (
+        <div className="rail-leaders">
+          {top.map((p, i) => (
+            <Link key={p.id} to={`/player/${p.id}`} className="rl-row">
+              <span className="rl-rank">{i + 1}</span>
+              <div><strong>{p.name}</strong><span>{p.team || "FA"} · {p.position || "—"}</span></div>
+              <b>{p.impact_score}</b>
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Up next: scheduled games involving the user's teams ── */
+function nickname(name?: string) {
+  return (name || "").toLowerCase().split(" ").pop() || "";
+}
+function UpNext({ league, favTeams }: { league: League; favTeams: { name: string; sport: string; abbreviation: string }[] }) {
+  const { data: upcoming = [] } = useUpcomingGames() as {
+    data?: { id: number; sport: string; game_date: string | null; home_team: { name: string | null }; away_team: { name: string | null }; already_predicted?: boolean }[];
+  };
+  const leagueFavs = favTeams.filter((t) => t.sport === league);
+  if (!leagueFavs.length) return null;
+  const favNicks = new Set(leagueFavs.map((t) => nickname(t.name)));
+  const games = upcoming
+    .filter((g) => g.sport === league && (favNicks.has(nickname(g.home_team.name || "")) || favNicks.has(nickname(g.away_team.name || ""))))
+    .slice(0, 5);
+  return (
+    <section className="dash-panel">
+      <div className="panel-heading"><div><span>Up next · your teams</span><h2>Upcoming games</h2></div></div>
+      {games.length === 0 ? (
+        <p className="empty-state" style={{ padding: "8px 0", fontSize: "0.85rem" }}>No scheduled {league} games for your teams right now.</p>
+      ) : (
+        <div className="upnext-list">
+          {games.map((g) => (
+            <Link key={g.id} to={`/game/${g.id}`} className="upnext-row">
+              <div className="upnext-teams"><strong>{g.away_team.name}</strong><span>@</span><strong>{g.home_team.name}</strong></div>
+              <div className="upnext-meta">
+                <span>{g.game_date ? new Date(g.game_date).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "TBD"}</span>
+                <em className={g.already_predicted ? "picked" : ""}>{g.already_predicted ? "Picked ✓" : "Make a pick →"}</em>
               </div>
-              <AgentPanel />
-            </div>
-          </section>
+            </Link>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/* ── Your stars: compact season line for followed players ── */
+function YourStars({ league, players }: { league: League; players: FollowedPlayer[] }) {
+  const leaguePlayers = players.filter((p) => p.sport === league);
+  const { data: statMap = {} } = usePlayerStats(league, leaguePlayers.map((p) => p.id));
+  if (!leaguePlayers.length) return null;
+  return (
+    <section className="dash-panel">
+      <div className="panel-heading"><div><span>Your stars · {league}</span><h2>Players you follow</h2></div></div>
+      <div className="stars-strip">
+        {leaguePlayers.map((p) => {
+          const line = statMap[String(p.id)]?.line ?? [];
+          return (
+            <Link key={p.id} to={`/player/${p.id}`} className="star-chip">
+              <div className="star-chip-head"><strong>{p.name}</strong><span>{p.team || "FA"} · {p.position || "—"}</span></div>
+              {line.length > 0 ? (
+                <div className="star-chip-line">{line.slice(0, 3).map((s) => <span key={s.label}><b>{s.value}</b> {s.label}</span>)}</div>
+              ) : (
+                <div className="star-chip-line muted">Season line updates as games post</div>
+              )}
+            </Link>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+/* ── Recent results: latest finals for the user's teams ── */
+function RecentResults({ games }: { games: Game[] }) {
+  const navigate = useNavigate();
+  const finals = games.filter((g) => g.status === "final").slice(0, 6);
+  if (!finals.length) return null;
+  return (
+    <section className="dash-panel">
+      <div className="panel-heading"><div><span>Recent results · your teams</span><h2>Latest games</h2></div>
+        <button className="btn-ghost" onClick={() => navigate("/season")}>See full season →</button></div>
+      <div className="games-grid compact">{finals.map((g) => <ScoreCard key={g.id} game={g} />)}</div>
+    </section>
+  );
+}
+
+/* ── Dashboard shell ── */
+export default function Feed() {
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const activeTab: Tab = PATH_TO_TAB[pathname] ?? "dashboard";
+  const [league, setLeague] = useState<League>("NBA");
+
+  const { data: user } = useCurrentUser();
+  const { data: feed, isLoading } = useFeed();
+  const { data: liveData } = useGames({ sport: league, status: "live", limit: 12 });
+
+  const favoriteTeams = useMemo(
+    () => (user?.favorite_teams ?? []) as { abbreviation: string; sport: string; name: string }[],
+    [user?.favorite_teams],
+  );
+  const followedPlayers = useMemo(
+    () => (user?.followed_players ?? []) as FollowedPlayer[],
+    [user?.followed_players],
+  );
+
+  // Auto-select the league of the picked teams so the dashboard isn't blank when
+  // a fan follows NFL teams but the toggle defaulted to NBA.
+  useEffect(() => {
+    if (favoriteTeams.length && !favoriteTeams.some((t) => t.sport === league)) {
+      const id = window.setTimeout(() => setLeague(favoriteTeams[0].sport as League), 0);
+      return () => window.clearTimeout(id);
+    }
+  }, [favoriteTeams, league]);
+
+  const games: Game[] = ((feed?.games ?? []) as Game[]).filter((g) => g.sport === league);
+  const onboarded = feed?.onboarded ?? false;
+  const live = (liveData?.games ?? []) as Game[];
+  const reelGames = games.length ? games : live;
+  const latestFinal = games.find((g) => g.status === "final");
+
+  return (
+    <div className={`dash league-${league.toLowerCase()}`}>
+      <aside className="dash-sidebar">
+        <Link to="/" className="dash-brand"><img src="/replaysai-logo.svg" alt="" />Replays<b>AI</b></Link>
+        <nav className="dash-nav">{TABS.map((tab) => <button key={tab.id} className={activeTab === tab.id ? "on" : ""} onClick={() => navigate(tab.path)}>{tab.label}</button>)}</nav>
+        <div className="dash-side-card"><span>Following</span><strong>{favoriteTeams.length} teams · {followedPlayers.length} players</strong><Link to="/demo">Edit teams / players</Link></div>
+      </aside>
+
+      <main className="dash-main">
+        <header className="dash-header">
+          <div><p className="dashboard-kicker">Live sports desk</p><h1>{user?.display_name || `${league} feed`}</h1></div>
+          <div className="league-switch">{(["NBA", "NFL"] as League[]).map((l) => <button key={l} className={league === l ? "active" : ""} onClick={() => setLeague(l)}>{l}</button>)}</div>
+        </header>
+
+        {!onboarded && (
+          <div className="setup-banner"><div><strong>Pick teams and star players to generate your feed.</strong><p>Games, stats, news, picks, and reels will filter to your selections.</p></div><Link to="/demo" className="btn-primary">Pick teams</Link></div>
         )}
 
-        {activeTab === "live" && (
-          <section className="dashboard-panel">
-            <div className="panel-heading">
-              <div>
-                <span>{league} every 30 seconds</span>
-                <h2>Live reel control room</h2>
+        {activeTab === "dashboard" && (
+          <>
+            <ScoresTicker sport={league} />
+            <CommandHero league={league} teams={favoriteTeams} players={followedPlayers} games={games} liveCount={live.length} />
+            <div className="dash-home">
+              <div className="dash-main-col">
+                <Briefing league={league} teams={favoriteTeams} players={followedPlayers} games={games} />
+                <UpNext league={league} favTeams={favoriteTeams} />
+                <YourStars league={league} players={followedPlayers} />
+                <RecentResults games={games} />
+                <details className="dash-more">
+                  <summary>More analysis — predictions, what-ifs, player stats</summary>
+                  <div className="dash-more-body">
+                    <PredictionLab league={league} teams={favoriteTeams} games={games} />
+                    <WhatIf gameId={latestFinal?.id} title={latestFinal ? gameTitle(latestFinal) : ""} />
+                    <StatsBlock league={league} players={followedPlayers} />
+                  </div>
+                </details>
               </div>
-              <a href={LEAGUE_META[league].stream} target="_blank" rel="noreferrer">ESPN hub</a>
-            </div>
-            <div className="live-command-grid">
-              <div className="live-rink">
-                <div className="live-rink-line" />
-                <div className="live-puck">{league}</div>
-                <div className="live-rink-copy">
-                  <strong>{live.length ? `${live.length} games live` : "No live games right now"}</strong>
-                  <span>When games are active, this panel becomes the fast lane into generated reels, play timeline, and recap generation.</span>
+              <aside className="dash-rail">
+                <StandingsRail sport={league} favs={new Set(favoriteTeams.filter((t) => t.sport === league).map((t) => t.abbreviation))} />
+                <LeadersRail sport={league} />
+                <div className="rail-card">
+                  <div className="rail-head"><span>Tailored news</span></div>
+                  <NewsBlock league={league} teams={favoriteTeams} players={followedPlayers} embedded />
                 </div>
-              </div>
-              <SignalBoard league={league} />
-            </div>
-            <div className="live-actions-row">
-              <Link className="btn-primary" to={featuredLive ? `/game/${featuredLive.id}` : "/reels"}>
-                {featuredLive ? "Open live game reels" : "Open reel studio"}
-              </Link>
-              <Link className="btn-ghost" to="/reels">Prompt a custom reel</Link>
-            </div>
-            <div className="games-grid compact">
-              {live.map((game) => <ScoreCard key={game.id} game={game} />)}
-            </div>
-          </section>
-        )}
-
-        {activeTab === "chat" && (
-          <section className="dashboard-panel">
-            <div className="panel-heading">
-              <div>
-                <span>Conversational layer</span>
-                <h2>Ask ReplaysAI about {league}</h2>
-              </div>
-              <Link to="/reels">Open reels</Link>
-            </div>
-            <div className="research-layout">
-              <AssistantChat games={games} league={league} />
-              <aside className="research-panel">
-                <strong>Research rails</strong>
-                <Link to="/reels">Generate a story reel</Link>
-                <Link to="/roster">Simulate roster impact</Link>
-                <Link to="/predictions">Turn answer into a pick</Link>
               </aside>
             </div>
-          </section>
+          </>
         )}
 
-        {activeTab === "predictions" && (
-          <section className="dashboard-panel">
-            <div className="panel-heading">
-              <div>
-                <span>{league} forecast</span>
-                <h2>Prediction board</h2>
-              </div>
-              <Link to="/predictions">Open picks</Link>
-            </div>
-            <div className="prediction-stage">
-              <div className="prediction-orbit">
-                <span>Model</span>
-                <strong>{league === "NBA" ? "Pace + shot profile" : "Drive + field position"}</strong>
-                <small>Use live context, matchup history, and roster form before locking picks.</small>
-              </div>
-              <SignalBoard league={league} />
-            </div>
-            <div className="prediction-queue">
-              {leagueUpcoming.length === 0 && <p className="empty-state">No scheduled {league} games available for picks.</p>}
-              {leagueUpcoming.slice(0, 6).map((game: { id: number; sport: string; home_team: { name: string }; away_team: { name: string }; game_date: string | null }) => (
-                <Link to="/predictions" key={game.id} className="prediction-row">
-                  <span>{game.sport}</span>
-                  <strong>{game.away_team.name} at {game.home_team.name}</strong>
-                  <small>{game.game_date ? new Date(game.game_date).toLocaleString() : "TBD"}</small>
-                </Link>
-              ))}
-            </div>
-          </section>
+        {activeTab === "season" && (
+          <>
+            <SeasonShape league={league} teams={favoriteTeams} games={games} />
+            <section className="dash-panel">
+              <div className="panel-heading"><div><span>{onboarded ? `${league} · last 10 seasons` : `${league} recent games`}</span><h2>All games {games.length ? `(${games.length})` : ""}</h2></div><button className="btn-ghost" onClick={() => navigate("/reels")}>Make a reel →</button></div>
+              {isLoading && <p className="loading-text">Loading games…</p>}
+              {!isLoading && games.length === 0 && <p className="empty-state">No {league} games yet. <Link to="/demo">Pick teams →</Link></p>}
+              <div className="games-grid">{games.map((g) => <ScoreCard key={g.id} game={g} />)}</div>
+            </section>
+          </>
         )}
 
-        {activeTab === "roster" && (
-          <section className="dashboard-panel">
-            <div className="panel-heading">
-              <div>
-                <span>{league} what-if lab</span>
-                <h2>Roster simulator</h2>
-              </div>
-              <Link to="/roster">Build roster</Link>
-            </div>
-            <div className="simulator-strip">
-              <div>
-                <span>Scenario</span>
-                <strong>{league === "NBA" ? "Small-ball closing lineup" : "Pass-heavy two-minute drill"}</strong>
-              </div>
-              <div>
-                <span>Projection</span>
-                <strong>{topRosterPlayers.length ? `+${Math.round(topRosterPlayers[0].impact_score)} impact` : "Waiting for players"}</strong>
-              </div>
-            </div>
-            <div className="roster-outlook">
-              {topRosterPlayers.length === 0 && <p className="empty-state">No players loaded yet. Backfill box scores to unlock forecasts.</p>}
-              {topRosterPlayers.map((player) => (
-                <div key={player.id} className="roster-outlook-row">
-                  <div>
-                    <strong>{player.name}</strong>
-                    <span>{player.team || "FA"} · {player.position || "UTIL"}</span>
-                  </div>
-                  <b>{player.impact_score}</b>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
+        {activeTab === "reels" && <ReelsPanel games={reelGames} league={league} />}
 
-        {activeTab === "agents" && (
-          <section className="dashboard-panel">
-            <div className="panel-heading">
-              <div>
-                <span>Orchestration</span>
-                <h2>Dashboard agents</h2>
+        {activeTab === "extras" && (
+          <>
+            <PicksPanel league={league} />
+            <RosterPanel league={league} />
+            <DemoLeaderboardPanel league={league} />
+            <section className="dash-panel">
+              <div className="panel-heading"><div><span>Your standing</span><h2>Points & badges</h2></div></div>
+              <div className="leaders-stats">
+                <div className="dashboard-stat"><strong>{user?.total_points ?? 0}</strong><span>Points</span></div>
+                <div className="dashboard-stat"><strong>{user?.login_streak ?? 0}</strong><span>Streak</span></div>
+                <div className="dashboard-stat"><strong>{(user?.badges ?? []).length}</strong><span>Badges</span></div>
               </div>
-            </div>
-            <AgentPanel />
-          </section>
+              <p className="panel-note">Global leaderboards need a server-side store. For now points and picks live in your browser — lock picks above to earn points.</p>
+            </section>
+          </>
         )}
       </main>
     </div>

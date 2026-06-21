@@ -85,6 +85,7 @@ class ChatBody(BaseModel):
     message: str
     context: str | None = None
     favorite_teams: list[str] = Field(default_factory=list)
+    followed_players: list[str] = Field(default_factory=list)
     messages: list["ChatMessage"] = Field(default_factory=list)
 
 
@@ -98,7 +99,7 @@ ChatBody.model_rebuild()
 
 def _user_context(user: AuthUser, body: ChatBody) -> str:
     teams = body.favorite_teams[:12]
-    players = []
+    players = body.followed_players[:12]
     if body.context:
         teams.append(f"route context: {body.context}")
     return (
@@ -122,28 +123,35 @@ def _conversation(body: ChatBody) -> list[dict[str, str]]:
 def _local_reply(body: ChatBody, user: AuthUser) -> str:
     text = body.message.lower()
     context = body.context or "the current page"
-    team_hint = ""
+    teams = ", ".join(body.favorite_teams[:8]) or "your selected teams"
+    players = ", ".join(body.followed_players[:8]) or "your followed players"
 
     if any(word in text for word in ["recap", "summary", "explain"]):
         return (
-            f"I can explain this from {context}{team_hint}. Open a game card and use Recap or Plays; "
-            "I will focus on the score flow, turning points, player production, and what changed the game."
+            f"Here is how I would handle the recap from {context}: start with the final score and score flow, "
+            f"then isolate the decisive run or possession swing, then connect star production for {players} "
+            f"back to {teams}. Open a game card and use Recap, My Team, Reels, or Plays for the fully grounded version."
         )
     if any(word in text for word in ["reel", "video", "highlight", "clip"]):
         return (
-            "For reels, open the Reels tab on a game or the main Reels studio. Tell me the focus and length, then I will build a generated story reel instead of sending you to a video link."
+            "For reels, I work like a reel director: choose a game, then tell me the focus and tier. "
+            "Tier 1 is a 2-minute quick rundown, Tier 2 is a 5-minute detailed recap, and Tier 3 is a 10-minute deep dive. "
+            "You can narrow it by player, quarter, play type, or the whole game."
         )
     if any(word in text for word in ["pick", "prediction", "who wins", "bet"]):
         return (
-            f"My read: compare current score/status, favorite-team context{team_hint}, and recent play detail before locking a pick. "
-            "For scheduled games, pick from the game detail card so it can be scored later."
+            f"My prediction workflow compares recent form, scoring edge, live status, and favorite-team context for {teams}. "
+            "I would avoid treating it as betting advice; use it as a model-style confidence read before locking a pick."
         )
     if any(word in text for word in ["roster", "player", "fantasy", "draft"]):
         return (
-            "Use the roster pool to draft up to 8 players. The player list is backed by stored box scores first and ESPN athlete leaderboards when no local player rows exist."
+            f"For roster strategy, I rank ceiling, role stability, and matchup context for {players}. "
+            "Draft up to 8 players, then use the stats and leaders panels to compare production and risk."
         )
     return (
-        f"I am following the conversation and the current page is {context}. Ask me about a game, player, roster, reel, or prediction and I will ground the answer in your app state."
+        f"I am following the conversation from {context}. I can answer as the Stats Agent, Prediction Agent, "
+        f"Reel Director Agent, Fan Voice Agent, News Agent, or Roster Agent for {teams} and {players}. "
+        "Ask for a detailed breakdown when you want a deeper brief."
     )
 
 
@@ -161,7 +169,7 @@ def _llm_reply(system: str, app_context: str, conversation: list[dict[str, str]]
                 try:
                     response = client.messages.create(
                         model=model,
-                        max_tokens=700,
+                        max_tokens=1400,
                         system=f"{system}\n\n{app_context}",
                         messages=conversation,
                     )
@@ -178,7 +186,7 @@ def _llm_reply(system: str, app_context: str, conversation: list[dict[str, str]]
             client = OpenAI(api_key=settings.openai_api_key)
             response = client.chat.completions.create(
                 model=settings.openai_model,
-                max_tokens=700,
+                max_tokens=1400,
                 messages=[
                     {"role": "system", "content": system},
                     {"role": "user", "content": app_context},
@@ -195,10 +203,19 @@ def _llm_reply(system: str, app_context: str, conversation: list[dict[str, str]]
 @router.post("")
 def chat(body: ChatBody, user: AuthUser = Depends(get_current_user)):
     system = (
-        "You are ReplaysAI's in-app sports assistant. Help the user understand games, "
-        "personalization, reels, fantasy rosters, predictions, and leaderboard strategy. "
-        "Use the supplied app context and conversation history. Be conversational, concise, "
-        "specific, and action-oriented."
+        "You are ReplaysAI's in-app sports assistant and coordinator for six specialist agents: "
+        "Personalization Agent, Stats Agent, Prediction Agent, Reel Director Agent, Fan Voice Agent, "
+        "and News/Roster Agent. Help the user understand games, personalization, reels, fantasy "
+        "rosters, predictions, leaderboards, and fan-perspective recaps. Use the supplied app "
+        "context and conversation history. Be specific and detailed when asked: name the agent "
+        "perspective you are using, cite the exact dashboard context you were given, separate facts "
+        "from model-style inference, and never invent unavailable stats, clips, or scores.\n\n"
+        "INTERRUPT-AND-ASK: if the context begins with 'reel ' it is a paused highlight reel. The "
+        "viewer stopped on a specific clip — answer their question about THAT moment first, grounding "
+        "your reply in the supplied segment/clip and recentNarration. As the in-reel analyst you may "
+        "draw on the rulebook, box score, and historical comparables that are relevant. Keep it tight "
+        "and broadcast-toned (a few sentences) so playback can resume; cite the clip/timestamp you "
+        "were given and never fabricate plays or numbers."
     )
     app_context = f"{_user_context(user, body)}\nCurrent route/context: {body.context or 'none'}"
     conversation = _conversation(body)

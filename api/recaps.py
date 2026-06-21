@@ -217,95 +217,106 @@ Structure the recap as Markdown with exactly these sections:
 # <a punchy headline naming the decisive player or storyline>
 **{facts['away']} {facts['away_score']}, {facts['home']} {facts['home_score']}**
 
-## The Story — 2-3 paragraphs on how the game unfolded and why the winner won
+## The Story — 3-4 paragraphs on how the game unfolded and why the winner won
+## Quarter Flow — period-by-period read using the score by period
 ## Turning Point — the stretch or plays that decided it, with specifics
 ## Star Performances — what the statistical leaders actually did and why it mattered
+## Tactical Read — pace, pressure, scoring profile, and what changed
 ## What It Means — stakes and what to watch next for both teams
 
-Aim for 450-650 words. Be concrete: scores, runs, names, periods."""
-    return llm_text(system, prompt, max_tokens=1200)
+Aim for 750-1000 words. Be concrete: scores, runs, names, periods."""
+    return llm_text(system, prompt, max_tokens=1900)
+
+
+def _scheduled_preview(facts: dict) -> str:
+    """A clean preview for games that have not started — no fake 'in progress' text."""
+    away, home = facts["away"], facts["home"]
+    leaders = facts["leaders"][:4]
+    stars = (
+        "Players to watch: "
+        + ", ".join(f"{row['player']} ({row['team']})" for row in leaders)
+        + "."
+        if leaders else "Rosters and projected starters will fill in closer to tip."
+    )
+    return f"""# {away} at {home} — {facts['date']}
+**Scheduled — tip-off preview**
+
+{home} host {away} on {facts['date']}. Once the game is final, this page turns into a full
+recap: the decisive run, the star lines, and the moments that swung it.
+
+{stars}
+
+Check back after the final whistle for the complete recap and highlight reel."""
 
 
 def _data_recap(facts: dict, sport: str) -> str:
-    """Detailed recap assembled directly from the play-by-play when no LLM is configured."""
+    """A readable recap assembled from the play-by-play when no LLM is available."""
     away, home = facts["away"], facts["home"]
-    if facts["away_score"] is not None and facts["home_score"] is not None:
-        winner = home if facts["home_score"] > facts["away_score"] else away
-        margin = abs(facts["home_score"] - facts["away_score"])
-        scoreline = f"{away} {facts['away_score']}, {home} {facts['home_score']}"
-        loser = away if winner == home else home
-        story = (
-            f"{winner} beat {loser} by {margin}. The shape of the game matters as much as "
-            f"the margin: it produced {facts['lead_changes']} lead change"
-            f"{'s' if facts['lead_changes'] != 1 else ''}, and the important possessions "
-            "came in clusters rather than one isolated highlight."
-        )
+    if facts["away_score"] is None or facts["home_score"] is None:
+        return _scheduled_preview(facts)
+
+    home_won = facts["home_score"] > facts["away_score"]
+    winner, loser = (home, away) if home_won else (away, home)
+    win_score, lose_score = (
+        (facts["home_score"], facts["away_score"]) if home_won else (facts["away_score"], facts["home_score"])
+    )
+    margin = abs(facts["home_score"] - facts["away_score"])
+    live = facts.get("status") == "live"
+    verb = "lead" if live else "beat"
+    scoreline = f"{away} {facts['away_score']}, {home} {facts['home_score']}"
+
+    lc = facts["lead_changes"]
+    if margin >= 18:
+        shape = f"a comfortable {margin}-point win that {winner} controlled."
+    elif lc >= 6:
+        shape = f"a back-and-forth fight with {lc} lead changes before {winner} pulled away."
+    elif margin <= 5:
+        shape = f"a tight one decided late, {winner} edging it by {margin}."
     else:
-        scoreline = f"{away} at {home}"
-        story = "This matchup is still in progress — the numbers below update as it plays out."
+        shape = f"a steady {margin}-point result in {winner}'s favor."
 
-    period_rows = "\n".join(
-        f"| {p['label']} | {p['away']} | {p['home']} |" for p in facts["periods"]
-    )
-    period_table = (
-        f"| Period | {facts['away_abbr']} | {facts['home_abbr']} |\n|---|---|---|\n{period_rows}"
-        if period_rows else "Period-by-period scoring has not been published yet."
-    )
-    leader_rows = "\n".join(
-        f"- **{row['player']}** ({row['team']}) — {row['stat_line']} {row['category'].lower()}"
-        for row in facts["leaders"]
-    ) or "- Box score leaders have not been published yet."
+    periods = facts["periods"]
+    if periods:
+        flow = " → ".join(f"{p['label']} {p['away']}-{p['home']}" for p in periods)
+        flow_line = f"The game moved {flow} (away–home). "
+    else:
+        flow_line = ""
+
+    leaders = facts["leaders"][:4]
+    if leaders:
+        star_line = (
+            f"{leaders[0]['player']} led the way with {leaders[0]['stat_line']} for {leaders[0]['team']}"
+        )
+        if len(leaders) > 1:
+            star_line += ", with " + ", ".join(
+                f"{r['player']} adding {r['stat_line']}" for r in leaders[1:3]
+            )
+        star_line += "."
+    else:
+        star_line = "Box-score leaders post once the official summary lands."
+
+    headline = f"{winner} {verb} {loser}, {win_score}–{lose_score}"
+
     moment_rows = []
-    for play in facts["key_plays"]:
+    for play in facts["key_plays"][:10]:
         label = _period_label(sport, play.get("period") or 1)
-        score = (
-            f"{facts['away_abbr']} {play.get('away_score')}-{play.get('home_score')} {facts['home_abbr']}"
-            if play.get("away_score") is not None and play.get("home_score") is not None
-            else "score unavailable"
-        )
-        moment_rows.append(
-            f"- **{label} {play.get('clock') or ''}** — {play.get('description')} ({score})."
-        )
-    moment_text = "\n".join(moment_rows) or "- Play-by-play detail has not been published yet."
+        moment_rows.append(f"- **{label} {play.get('clock') or ''}** — {play.get('description')}")
+    moment_text = "\n".join(moment_rows) or "- Play-by-play detail will post with the official summary."
 
-    leaders = facts["leaders"][:6]
-    star_context = (
-        "The statistical shape was led by "
-        + "; ".join(
-            f"{row['player']} for {row['team']} with {row['stat_line']} {row['category'].lower()}"
-            for row in leaders[:4]
-        )
-        + "."
-        if leaders else
-        "The detailed box-score leader feed has not posted yet, so the current read leans on scoring flow and play sequence."
-    )
-
-    return f"""# {away} at {home} — {facts['date']}
-**{scoreline}**
+    return f"""# {headline}
+**{scoreline}** · {facts['date']}
 
 ## The Story
-{story}
+{winner} {verb} {loser} {(str(win_score) + '–' + str(lose_score))}, {shape} {flow_line}{star_line}
 
-{star_context}
+## How It Unfolded
+{flow_line or 'Period-by-period scoring will publish with the official box score.'}
 
-The period scores show where the game tilted. Read them as chapters: which team
-banked early control, which team answered, and whether the final margin came
-from one decisive push or a steady accumulation of small wins.
-
-## Scoring by Period
-{period_table}
-
-## Statistical Leaders
-{leader_rows}
+## Star Performances
+{star_line}
 
 ## Key Moments
-{moment_text}
-
-## What It Means
-The useful takeaway is the pattern: who controlled the score, which possessions
-changed leverage, and which players supplied the production that made the result
-hold.
-"""
+{moment_text}"""
 
 
 def _build_recap(game_id: int, sport: str, game: dict, summary: dict) -> dict:
@@ -315,9 +326,11 @@ def _build_recap(game_id: int, sport: str, game: dict, summary: dict) -> dict:
 
     content = None
     generated_by = "data"
-    # LLM recaps only for finished games: live numbers go stale immediately and
-    # every regeneration costs an inference call.
-    if game.get("status") == "final":
+    # Generate the full LLM recap whenever the game has been played (both scores
+    # present). ESPN's by-id status is unreliable — it sometimes labels finished
+    # games "scheduled" — so we key off the scoreline, not the status string.
+    played = facts["away_score"] is not None and facts["home_score"] is not None
+    if played:
         content = _llm_recap(facts, sport)
         if content:
             generated_by = "llm"
@@ -353,9 +366,11 @@ def get_recap(game_id: int):
     result = _build_recap(game_id, sport, game, summary)
     settings = get_settings()
     llm_configured = bool(settings.anthropic_api_key or settings.openai_api_key)
-    # Never cache a fallback recap when an LLM is configured — a transient
-    # provider error would otherwise pin the lesser recap for hours.
-    if game.get("status") == "final" and (result["generated_by"] == "llm" or not llm_configured):
+    played = game.get("away_score") is not None and game.get("home_score") is not None
+    # Cache played games (final/mislabeled), but not obviously-live ones whose
+    # numbers keep changing. Never cache a fallback recap when an LLM is
+    # configured — a transient provider error would pin the lesser recap.
+    if played and game.get("status") != "live" and (result["generated_by"] == "llm" or not llm_configured):
         _memo_set(cache_key, result)
         cache_set(cache_key, result)
     return result

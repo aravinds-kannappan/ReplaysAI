@@ -97,12 +97,23 @@ def _user_from_payload(payload: dict) -> AuthUser:
     )
 
 
+def guest_user() -> AuthUser:
+    """The app runs fully without login, so requests without a verifiable token
+    resolve to an anonymous guest instead of being rejected."""
+    return AuthUser(id="guest", clerk_id="guest", username="guest", display_name="Guest", favorite_teams=[], followed_players=[])
+
+
 def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Security(security),
 ) -> AuthUser:
+    # No login is required anymore. If a token is present and valid we use it,
+    # otherwise everyone is treated as an anonymous guest.
     if not credentials:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    return _user_from_payload(_verify_clerk_token(credentials.credentials))
+        return guest_user()
+    try:
+        return _user_from_payload(_verify_clerk_token(credentials.credentials))
+    except HTTPException:
+        return guest_user()
 
 
 def get_optional_user(

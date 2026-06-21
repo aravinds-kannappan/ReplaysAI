@@ -52,7 +52,7 @@ function HighlightReel({ gameId }: Props) {
         {cuts.length === 0 && <p className="empty-state">Play-by-play has not published for this game yet.</p>}
       </div>
 
-      <Link to="/reels" className="btn-ghost">Open the reel studio to prompt a custom story →</Link>
+      <Link to={`/reel/${gameId}`} className="btn-primary">▶ Open narrated reel — interrupt &amp; ask anytime →</Link>
     </div>
   );
 }
