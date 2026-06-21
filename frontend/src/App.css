@@ -95,11 +95,12 @@ a { color: inherit; text-decoration: none; }
 .tab-btn:hover { color: var(--text); }
 
 /* ─── Recap ─── */
-.recap-content { line-height: 1.7; }
-.recap-content h1 { font-size: 1.4rem; margin-bottom: 4px; }
+.recap-content { line-height: 1.7; overflow-wrap: anywhere; color: var(--text); }
+.recap-content h1 { font-size: 1.4rem; margin-bottom: 4px; color: var(--text); }
 .recap-content h2 { font-size: 1.1rem; margin: 20px 0 8px; color: var(--accent); }
-.recap-content p { margin-bottom: 10px; color: var(--text); }
-.recap-content strong { color: var(--text); }
+.recap-content h3, .recap-content h4 { color: var(--text); margin: 14px 0 6px; }
+.recap-content p, .recap-content li { margin-bottom: 10px; color: var(--text); }
+.recap-content strong, .recap-content b { color: var(--text); }
 .recap-content hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
 .recap-placeholder { text-align: center; padding: 60px 20px; color: var(--text-muted); }
 .btn-generate { margin-top: 16px; padding: 12px 28px; background: var(--accent); color: #fff; border: none; border-radius: 8px; font-size: 0.95rem; font-weight: 600; cursor: pointer; }
@@ -1729,7 +1730,7 @@ a { color: inherit; text-decoration: none; }
 .dash-side-card strong { font-size: 0.9rem; }
 .dash-side-card a { color: var(--accent); font-size: 0.82rem; font-weight: 600; margin-top: 4px; }
 
-.dash-main { padding: 28px 32px 60px; max-width: 1180px; }
+.dash-main { padding: 28px 32px 60px; max-width: 1180px; min-width: 0; overflow-x: hidden; }
 .dash-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
 .dash-header h1 { font-size: 1.7rem; font-weight: 850; }
 .dash-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 22px; margin-bottom: 18px; }
@@ -1862,6 +1863,23 @@ a { color: inherit; text-decoration: none; }
 .dash-more > summary:hover { color: var(--text); }
 .dash-more-body { padding: 0 4px 4px; }
 .dash-more-body .dash-panel { margin: 0 12px 14px; }
+
+/* Feature spotlight */
+.feature-spotlight { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 18px; }
+@media (max-width: 900px) { .feature-spotlight { grid-template-columns: 1fr; } }
+.fs-card { position: relative; text-align: left; padding: 16px; border-radius: 12px; border: 1px solid var(--border); background: linear-gradient(160deg, rgba(32,211,139,0.08), var(--surface)); color: var(--text); cursor: pointer; transition: transform 0.15s ease, border-color 0.15s ease; }
+.fs-card:hover { transform: translateY(-2px); border-color: var(--accent); }
+.fs-reel { background: linear-gradient(160deg, rgba(66,214,255,0.08), var(--surface)); }
+.fs-season { background: linear-gradient(160deg, rgba(243,200,75,0.08), var(--surface)); }
+.fs-badge { position: absolute; top: 12px; right: 12px; font-size: 0.6rem; font-weight: 900; letter-spacing: 0.08em; color: #06120c; background: var(--accent); padding: 2px 7px; border-radius: 999px; }
+.fs-card strong { display: block; font-size: 1rem; margin-bottom: 6px; }
+.fs-card p { font-size: 0.82rem; color: var(--text-muted); line-height: 1.45; }
+.fs-go { display: inline-block; margin-top: 10px; font-size: 0.82rem; font-weight: 700; color: var(--accent); }
+
+/* Sidebar Dream Team link */
+.dash-nav-link { display: flex; align-items: center; gap: 8px; padding: 10px 0; color: var(--text-muted); text-decoration: none; font-weight: 700; font-size: 0.95rem; }
+.dash-nav-link:hover { color: var(--accent); }
+.nav-new { font-size: 0.58rem; font-weight: 900; letter-spacing: 0.06em; color: #06120c; background: var(--accent); padding: 1px 6px; border-radius: 999px; }
 
 /* Up next */
 .upnext-list { display: flex; flex-direction: column; gap: 8px; }
@@ -2588,7 +2606,7 @@ a { color: inherit; text-decoration: none; }
 .dash-nav { gap: 0; }
 .dash-nav button { border-radius: 0; min-height: 48px; padding: 0 18px; border-left: 3px solid transparent; }
 .dash-nav button.on { background: rgba(255,255,255,0.09); color: #fff; border-left-color: #2d8cff; }
-.dash-main { max-width: none; padding: 28px clamp(20px, 5vw, 72px) 72px; }
+.dash-main { max-width: none; padding: 28px clamp(20px, 5vw, 72px) 72px; min-width: 0; overflow-x: hidden; }
 .dash-header {
   border: 1px solid var(--line);
   border-radius: 6px;

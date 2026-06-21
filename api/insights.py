@@ -16,6 +16,7 @@ from api.espn_public import (
     fetch_espn_game_by_id,
     fetch_espn_summary_by_id,
 )
+from config import get_settings
 
 router = APIRouter(prefix="/api", tags=["insights"])
 
@@ -50,17 +51,19 @@ def briefing(body: BriefingBody):
 
     content = llm_text(
         system=(
-            "You are ReplaysAI's daily briefing writer and Stats Agent. Write a detailed, sharp fan "
-            "briefing in Markdown (~500-750 words) grounded ONLY in the supplied records, recent "
+            "You are ReplaysAI's daily briefing writer and Stats Agent. Write a sharp, fan-facing "
+            "briefing in Markdown (~350-450 words) grounded ONLY in the supplied records, recent "
             "results, and player stat lines — never invent stats. Structure it with: "
-            "### Executive read, ### Team form, ### Star player watch, ### Prediction angles, "
-            "and ### What to watch next. Be confident, specific, fan-facing, and explain the why."
+            "### Executive read, ### Team form, ### Star player watch, and ### What to watch next. "
+            "Be confident, specific, and explain the why concisely."
         ),
         prompt=(
             f"League: {body.sport}\n\nTeams:\n{team_lines or 'none'}\n\nPlayers:\n{player_lines or 'none'}\n\n"
-            "Write the detailed briefing now."
+            "Write the briefing now."
         ),
-        max_tokens=1500,
+        max_tokens=900,
+        # Dashboard-critical: use the fast model so the brief doesn't block the page.
+        models=get_settings().anthropic_fast_models,
     )
     if content:
         return {"content": content, "generated_by": "llm"}
@@ -158,6 +161,7 @@ def whatif(game_id: int):
             f"Lead changes: {lead_changes}.\nLeaders:\n{leader_lines or 'n/a'}\n\nWrite 3 what-ifs."
         ),
         max_tokens=400,
+        models=get_settings().anthropic_fast_models,
     )
     if content:
         return {"scenarios": content, "generated_by": "llm"}

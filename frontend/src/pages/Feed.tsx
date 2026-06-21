@@ -84,7 +84,7 @@ function PointsTrend({ data }: { data: FormGame[] }) {
 /* ── AI briefing ── */
 function Briefing({ league, teams, players, games }: { league: League; teams: { name: string; abbreviation: string; sport: string }[]; players: FollowedPlayer[]; games: Game[] }) {
   const leagueTeams = teams.filter((t) => t.sport === league);
-  const { data: statMap = {} } = usePlayerStats(league, players.filter((p) => p.sport === league).map((p) => p.id));
+  const { data: statMap = {}, isLoading: statsLoading } = usePlayerStats(league, players.filter((p) => p.sport === league).map((p) => p.id));
   const payload = useMemo(() => ({
     sport: league,
     teams: leagueTeams.map((t) => {
@@ -97,7 +97,9 @@ function Briefing({ league, teams, players, games }: { league: League; teams: { 
   const { data, isLoading } = useQuery({
     queryKey: ["briefing", league, JSON.stringify(payload)],
     queryFn: () => axios.post(apiPath("/api/briefing"), payload).then((r) => r.data),
-    enabled: leagueTeams.length > 0,
+    // Wait for player stats so the brief is generated once with full data,
+    // not fired twice (empty → then with stats).
+    enabled: leagueTeams.length > 0 && !statsLoading,
     staleTime: 300_000,
   });
 
@@ -726,12 +728,40 @@ function RecentResults({ games }: { games: Game[] }) {
   );
 }
 
+/* ── New-feature spotlight (discoverability for Dream Team + narrated reels) ── */
+function FeatureSpotlight() {
+  const navigate = useNavigate();
+  return (
+    <div className="feature-spotlight">
+      <button className="fs-card fs-dream" onClick={() => navigate("/dream-team")}>
+        <span className="fs-badge">NEW</span>
+        <strong>🏆 Dream Team Simulator</strong>
+        <p>Draft real stars and run 10,000 Monte-Carlo seasons for your championship odds + a shareable card.</p>
+        <span className="fs-go">Build your squad →</span>
+      </button>
+      <button className="fs-card fs-reel" onClick={() => navigate("/reels")}>
+        <span className="fs-badge">NEW</span>
+        <strong>🎙️ Narrated Reels + Ask</strong>
+        <p>Voiced highlight reels of your teams' games — pause anytime and ask the analyst by mic or text.</p>
+        <span className="fs-go">Open the reel studio →</span>
+      </button>
+      <button className="fs-card fs-season" onClick={() => navigate("/season")}>
+        <span className="fs-badge">NEW</span>
+        <strong>📊 Season View</strong>
+        <p>Every game from your teams' last 10 seasons, with form charts — moved out of the dashboard.</p>
+        <span className="fs-go">See the season →</span>
+      </button>
+    </div>
+  );
+}
+
 /* ── Dashboard shell ── */
 export default function Feed() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const activeTab: Tab = PATH_TO_TAB[pathname] ?? "dashboard";
   const [league, setLeague] = useState<League>("NBA");
+  const [moreOpen, setMoreOpen] = useState(false);
 
   const { data: user } = useCurrentUser();
   const { data: feed, isLoading } = useFeed();
@@ -765,7 +795,10 @@ export default function Feed() {
     <div className={`dash league-${league.toLowerCase()}`}>
       <aside className="dash-sidebar">
         <Link to="/" className="dash-brand"><img src="/replaysai-logo.svg" alt="" />Replays<b>AI</b></Link>
-        <nav className="dash-nav">{TABS.map((tab) => <button key={tab.id} className={activeTab === tab.id ? "on" : ""} onClick={() => navigate(tab.path)}>{tab.label}</button>)}</nav>
+        <nav className="dash-nav">
+          {TABS.map((tab) => <button key={tab.id} className={activeTab === tab.id ? "on" : ""} onClick={() => navigate(tab.path)}>{tab.label}</button>)}
+          <Link to="/dream-team" className="dash-nav-link">Dream Team <span className="nav-new">NEW</span></Link>
+        </nav>
         <div className="dash-side-card"><span>Following</span><strong>{favoriteTeams.length} teams · {followedPlayers.length} players</strong><Link to="/demo">Edit teams / players</Link></div>
       </aside>
 
@@ -783,19 +816,22 @@ export default function Feed() {
           <>
             <ScoresTicker sport={league} />
             <CommandHero league={league} teams={favoriteTeams} players={followedPlayers} games={games} liveCount={live.length} />
+            <FeatureSpotlight />
             <div className="dash-home">
               <div className="dash-main-col">
                 <Briefing league={league} teams={favoriteTeams} players={followedPlayers} games={games} />
                 <UpNext league={league} favTeams={favoriteTeams} />
                 <YourStars league={league} players={followedPlayers} />
                 <RecentResults games={games} />
-                <details className="dash-more">
+                <details className="dash-more" onToggle={(e) => setMoreOpen((e.target as HTMLDetailsElement).open)}>
                   <summary>More analysis — predictions, what-ifs, player stats</summary>
-                  <div className="dash-more-body">
-                    <PredictionLab league={league} teams={favoriteTeams} games={games} />
-                    <WhatIf gameId={latestFinal?.id} title={latestFinal ? gameTitle(latestFinal) : ""} />
-                    <StatsBlock league={league} players={followedPlayers} />
-                  </div>
+                  {moreOpen && (
+                    <div className="dash-more-body">
+                      <PredictionLab league={league} teams={favoriteTeams} games={games} />
+                      <WhatIf gameId={latestFinal?.id} title={latestFinal ? gameTitle(latestFinal) : ""} />
+                      <StatsBlock league={league} players={followedPlayers} />
+                    </div>
+                  )}
                 </details>
               </div>
               <aside className="dash-rail">

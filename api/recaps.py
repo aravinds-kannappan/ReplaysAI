@@ -41,8 +41,11 @@ def _memo_set(key: str, value: dict) -> None:
 _last_llm_error: str | None = None
 
 
-def llm_text(system: str, prompt: str, max_tokens: int = 1500) -> str | None:
-    """One LLM completion; None when no provider is configured or the call fails."""
+def llm_text(system: str, prompt: str, max_tokens: int = 1500, models: list[str] | None = None) -> str | None:
+    """One LLM completion; None when no provider is configured or the call fails.
+
+    `models` overrides the model preference order (e.g. fast-first for
+    latency-sensitive callers)."""
     global _last_llm_error
     settings = get_settings()
     _last_llm_error = None
@@ -52,7 +55,7 @@ def llm_text(system: str, prompt: str, max_tokens: int = 1500) -> str | None:
             import anthropic
 
             client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-            for model in settings.anthropic_models:
+            for model in (models or settings.anthropic_models):
                 try:
                     response = client.messages.create(
                         model=model,

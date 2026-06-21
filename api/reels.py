@@ -14,6 +14,7 @@ writing one-line narration per clip.
 """
 import json
 import re
+from concurrent.futures import ThreadPoolExecutor
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException
@@ -340,13 +341,15 @@ def _voice_script(facts: dict, clips: list[dict], seconds: int) -> tuple[str, st
 
 @router.get("/{game_id}/reels")
 def get_reel_cuts(game_id: int):
+    """Fast: real clips + overlays per tier, no LLM. The reel plays and is voiced
+    from per-clip captions immediately; the long-form explainer/voice script is
+    generated lazily per tier via /reels/narration so the page never hangs."""
     sport, game_data, summary = _resolve(game_id)
     clips = _clips_for(summary, sport)
     facts = _facts(sport, game_data, summary)
     cuts = []
     for label, seconds, blurb in CUT_TIERS:
         selected = _spread(clips, seconds)
-        voice_script, voice_source = _voice_script(facts, selected, seconds)
         cuts.append({
             "label": label,
             "target_seconds": seconds,
@@ -354,15 +357,34 @@ def get_reel_cuts(game_id: int):
             "clip_count": len(selected),
             "duration_seconds": sum(c["duration"] for c in selected),
             "clips": _attach_overlays([_public_clip(c) for c in selected], facts),
-            "explainer": _explainer(facts, seconds),
-            "voice_script": voice_script,
-            "voice_source": voice_source,
         })
     return {
         "game_id": game_id,
         "clip_count": len(clips),
         "cuts": cuts,
         "rendering": {"playback": "video"},
+    }
+
+
+@router.get("/{game_id}/reels/narration")
+def get_reel_narration(game_id: int, seconds: int = 120):
+    """On-demand long-form narration for one tier: the spoken voice script + the
+    written game explainer. Generated only for the tier the user is viewing."""
+    sport, game_data, summary = _resolve(game_id)
+    clips = _clips_for(summary, sport)
+    facts = _facts(sport, game_data, summary)
+    selected = _spread(clips, seconds)
+    with ThreadPoolExecutor(max_workers=2) as ex:
+        voice_fut = ex.submit(_voice_script, facts, selected, seconds)
+        expl_fut = ex.submit(_explainer, facts, seconds)
+        voice_script, voice_source = voice_fut.result()
+        explainer = expl_fut.result()
+    return {
+        "game_id": game_id,
+        "target_seconds": seconds,
+        "explainer": explainer,
+        "voice_script": voice_script,
+        "voice_source": voice_source,
     }
 
 

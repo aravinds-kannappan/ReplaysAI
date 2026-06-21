@@ -6,10 +6,10 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     anthropic_api_key: str = ""
-    # Keep the default on a current Anthropic API ID. If an account lacks
-    # access to Opus, calls fall back through ANTHROPIC_FALLBACK_MODELS.
-    anthropic_model: str = "claude-opus-4-8"
-    anthropic_fallback_models: str = "claude-sonnet-4-6,claude-haiku-4-5"
+    # Default to Haiku for speed across the app (recaps, reels, briefings, sims).
+    # Opus is intentionally not used — it is far slower for this product's needs.
+    anthropic_model: str = "claude-haiku-4-5"
+    anthropic_fallback_models: str = "claude-sonnet-4-6"
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
     youtube_api_key: str = ""
@@ -50,6 +50,14 @@ class Settings(BaseSettings):
         models = [self.anthropic_model]
         models.extend(model.strip() for model in self.anthropic_fallback_models.split(","))
         return list(dict.fromkeys(model for model in models if model))
+
+    @property
+    def anthropic_fast_models(self) -> list[str]:
+        """Fastest model (Haiku) first — for latency-sensitive text (dashboard
+        briefing, what-ifs)."""
+        models = self.anthropic_models
+        fast = [m for m in models if "haiku" in m]
+        return fast + [m for m in models if m not in fast]
 
 
 @lru_cache
