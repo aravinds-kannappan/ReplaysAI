@@ -7,6 +7,9 @@ import Onboarding from "./pages/Onboarding";
 import Feed from "./pages/Feed";
 import DreamTeam from "./pages/DreamTeam";
 import ReelStudio from "./pages/ReelStudio";
+import ReelsPage from "./pages/ReelsPage";
+import BroadcastPlayer from "./pages/BroadcastPlayer";
+import NewsletterPage, { NewsletterShare } from "./pages/Newsletter";
 import GameDetail from "./pages/GameDetail";
 import PlayerProfile from "./pages/PlayerProfile";
 import Profile from "./pages/Profile";
@@ -23,23 +26,25 @@ export default function App() {
         <Navbar />
         <Routes>
           <Route path="/" element={<Landing />} />
-          {/* The demo is the team + player picker; no login required. */}
           <Route path="/demo" element={<Onboarding />} />
           <Route path="/onboarding" element={<Onboarding />} />
 
-          {/* One dashboard — every tab routes here and reads the tab from the path. */}
+          {/* Dashboard tabs */}
           <Route path="/feed" element={<Feed />} />
           <Route path="/dashboard" element={<Feed />} />
           <Route path="/season" element={<Feed />} />
           <Route path="/games" element={<Feed />} />
-          <Route path="/reels" element={<Feed />} />
           <Route path="/extras" element={<Feed />} />
           <Route path="/picks" element={<Feed />} />
           <Route path="/predictions" element={<Feed />} />
           <Route path="/roster" element={<Feed />} />
           <Route path="/leaderboard" element={<Feed />} />
 
-          {/* Dedicated heavy surfaces (hybrid routing). */}
+          {/* Dedicated surfaces */}
+          <Route path="/reels" element={<ReelsPage />} />
+          <Route path="/broadcast/:gameId" element={<BroadcastPlayer />} />
+          <Route path="/newsletter" element={<NewsletterPage />} />
+          <Route path="/newsletter/share/:token" element={<NewsletterShare />} />
           <Route path="/dream-team" element={<DreamTeam />} />
           <Route path="/reel/:gameId" element={<ReelStudio />} />
 

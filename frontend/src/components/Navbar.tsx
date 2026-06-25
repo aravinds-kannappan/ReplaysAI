@@ -3,7 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 // The dashboard has its own left sidebar nav, so the top navbar is hidden there
 // to avoid showing the same tabs twice.
 const DASHBOARD_ROUTES = new Set([
-  "/feed", "/dashboard", "/season", "/games", "/reels", "/extras", "/picks",
+  "/feed", "/dashboard", "/season", "/games", "/extras", "/picks",
   "/predictions", "/roster", "/news", "/chat", "/leaderboard", "/stats",
 ]);
 

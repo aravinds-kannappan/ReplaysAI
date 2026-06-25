@@ -11,21 +11,19 @@ import {
 import { useCurrentUser, type FollowedPlayer } from "../hooks/useUser";
 import { useGames } from "../hooks/useGames";
 import ScoreCard from "../components/ScoreCard";
-import ReelPlayer, { type Clip } from "../components/ReelPlayer";
 import { apiPath } from "../lib/api";
 import type { Game } from "../types";
 
 type League = "NBA" | "NFL";
-type Tab = "dashboard" | "season" | "reels" | "extras";
+type Tab = "dashboard" | "season" | "extras";
 
 const TABS: { id: Tab; label: string; path: string }[] = [
   { id: "dashboard", label: "Dashboard", path: "/feed" },
   { id: "season", label: "Season", path: "/season" },
-  { id: "reels", label: "Reels", path: "/reels" },
   { id: "extras", label: "Extras", path: "/extras" },
 ];
 const PATH_TO_TAB: Record<string, Tab> = {
-  "/feed": "dashboard", "/dashboard": "dashboard", "/season": "season", "/games": "season", "/reels": "reels",
+  "/feed": "dashboard", "/dashboard": "dashboard", "/season": "season", "/games": "season",
   "/extras": "extras", "/picks": "extras", "/predictions": "extras", "/roster": "extras", "/leaderboard": "extras",
 };
 
@@ -351,170 +349,6 @@ function NewsBlock({ league, teams, players, embedded }: { league: League; teams
 
 /* The Anthropic assistant lives in the bottom-right "AI" popup (FloatingAssistant). */
 
-/* ── Reels tab: CV building viz + game talk + tiers + Q&A director ── */
-function CvBuildingBanner() {
-  return (
-    <div className="cv-build">
-      <div className="cv-build-left"><span className="cv-pulse" /><div><strong>CV agent</strong><span>scanning footage · detecting moments</span></div></div>
-      <div className="cv-build-bars">{Array.from({ length: 22 }).map((_, i) => <i key={i} style={{ animationDelay: `${i * 0.06}s` }} />)}</div>
-      <div className="cv-build-right"><strong>Reel agent</strong><span>assembling clips</span></div>
-    </div>
-  );
-}
-
-const REEL_PROMPTS = [
-  ["Whole game · 2 min", "Quick 2 minute rundown of the whole game"],
-  ["4th quarter only", "Only the 4th quarter"],
-  ["Every dunk", "Every dunk in the game"],
-  ["10 min deep cut", "The most detailed 10 minute reel of the entire game"],
-];
-function ReelDirector({ gameId, onReel }: { gameId: number; onReel: (p: { label: string; clips: Clip[]; voiceScript?: string; voiceSource?: string }) => void }) {
-  const [draft, setDraft] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [log, setLog] = useState<{ role: "user" | "assistant"; text: string }[]>([
-    { role: "assistant", text: "I direct the reel. Tell me a player, a quarter (e.g. Q4), a play type (fouls, dunks, threes), or the whole game — and 2, 5, or 10 minutes. Ask me anything about the game too." },
-  ]);
-  async function send(prompt: string) {
-    if (!prompt || loading) return;
-    const history = [...log, { role: "user" as const, text: prompt }];
-    setLog(history); setLoading(true);
-    try {
-      const res = await axios.post(apiPath(`/api/games/${gameId}/reels/generate`), { prompt, messages: history });
-      if (res.data.action === "ask") setLog((p) => [...p, { role: "assistant", text: res.data.question }]);
-      else {
-        onReel({
-          label: res.data.reel.title,
-          clips: res.data.reel.clips,
-          voiceScript: res.data.reel.voice_script,
-          voiceSource: res.data.reel.voice_source,
-        });
-        setLog((p) => [...p, { role: "assistant", text: `${res.data.note}. Voice script is attached to the reel.` }]);
-      }
-    } catch { setLog((p) => [...p, { role: "assistant", text: "No highlight video is available for this game yet." }]); }
-    finally { setLoading(false); }
-  }
-  return (
-    <div className="reel-director">
-      <div className="panel-heading"><div><span>Reel director & Q&A</span><h2>Build a reel or ask about the game</h2></div></div>
-      <div className="chat-log">{log.map((m, i) => <div key={i} className={`chat-bubble ${m.role}`}>{m.text}</div>)}</div>
-      <div className="quick-prompts">{REEL_PROMPTS.map(([l, p]) => <button key={l} disabled={loading} onClick={() => void send(p)}>{l}</button>)}</div>
-      <form className="chat-form" onSubmit={(e) => { e.preventDefault(); const p = draft.trim(); setDraft(""); void send(p); }}><input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="e.g. only Brunson's 4th quarter…" /><button type="submit" disabled={loading}>{loading ? "…" : "Send"}</button></form>
-    </div>
-  );
-}
-
-type Cut = {
-  label: string;
-  blurb: string;
-  clip_count: number;
-  duration_seconds: number;
-  clips: Clip[];
-  explainer: string;
-  voice_script?: string;
-  voice_source?: string;
-};
-
-function VoiceScriptPanel({ script, source }: { script?: string; source?: string }) {
-  if (!script) return null;
-  return (
-    <details className="reel-voice-panel">
-      <summary>
-        🔊 Narration transcript
-        <em>{source === "anthropic" ? "AI voice script" : "voice script"}</em>
-      </summary>
-      <div className="voice-script-content"><ReactMarkdown>{script}</ReactMarkdown></div>
-    </details>
-  );
-}
-
-function ReelsPanel({ games, league }: { games: Game[]; league: League }) {
-  // A game is reel-able if it has been played. ESPN sometimes mislabels finished
-  // games as "scheduled", so we also accept any game that already has scores —
-  // this is what surfaces past games for the user's teams in the offseason.
-  const playable = useMemo(
-    () => games.filter((g) => (g.away_score != null && g.home_score != null) || g.status === "live"),
-    [games],
-  );
-  const [gameId, setGameId] = useState<number | null>(null);
-  const [playlist, setPlaylist] = useState<{ label: string; clips: Clip[]; voiceScript?: string; voiceSource?: string } | null>(null);
-  const [activeCut, setActiveCut] = useState<string | null>(null);
-  useEffect(() => {
-    if ((gameId !== null && playable.some((g) => g.id === gameId)) || !playable[0]) return;
-    const id = window.setTimeout(() => {
-      setGameId(playable[0].id);
-      setPlaylist(null);
-      setActiveCut(null);
-    }, 0);
-    return () => window.clearTimeout(id);
-  }, [playable, gameId]);
-  const game = games.find((g) => g.id === gameId);
-  const { data: reelData, isLoading } = useQuery({ queryKey: ["reel-cuts", gameId], queryFn: () => axios.get(apiPath(`/api/games/${gameId}/reels`)).then((r) => r.data), enabled: !!gameId, staleTime: 300_000 });
-  const cuts = (reelData?.cuts ?? []) as Cut[];
-  const noVideo = reelData && (reelData.clip_count ?? 0) === 0;
-  const shownCut = cuts.find((c) => c.label === activeCut) ?? cuts[0];
-
-  function playCut(cut: Cut) {
-    setActiveCut(cut.label);
-    if (cut.clips.length) setPlaylist({
-      label: `${gameTitle(game)} · ${cut.label}`,
-      clips: cut.clips,
-      voiceScript: cut.voice_script,
-      voiceSource: cut.voice_source,
-    });
-    else setPlaylist(null);
-  }
-
-  return (
-    <section className="dash-panel">
-      <div className="panel-heading"><div><span>Game explainer · {league}</span><h2>Reel studio{game ? ` — ${gameTitle(game)}` : ""}</h2></div>
-        {gameId && <Link to={`/reel/${gameId}`} className="btn-primary">Open narrated reel →</Link>}</div>
-      <CvBuildingBanner />
-      <p className="reel-strip-label">Past games for your teams — pick one to build a narrated reel:</p>
-      <div className="reel-game-strip">
-        {playable.slice(0, 18).map((g) => (
-          <button key={g.id} className={`reel-game-chip ${g.id === gameId ? "on" : ""}`} onClick={() => { setGameId(g.id); setPlaylist(null); setActiveCut(null); }}>
-            <strong>{gameTitle(g)}</strong>
-            <span>{g.status === "live" ? "LIVE" : `${g.away_score ?? "—"}-${g.home_score ?? "—"}`}{g.game_date ? ` · ${new Date(g.game_date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : ""}</span>
-          </button>
-        ))}
-        {playable.length === 0 && <p className="empty-state">No past {league} games for your teams yet. <Link to="/demo">Pick teams →</Link></p>}
-      </div>
-
-      {isLoading && <p className="loading-text">CV agent reading the game…</p>}
-
-      {/* Tiered explainer — like a NotebookLM deep dive, 2/5/10 min depth */}
-      {cuts.length > 0 && (
-        <div className="reel-tiers">
-          {cuts.map((cut) => (
-            <button key={cut.label} className={`reel-tier ${shownCut?.label === cut.label ? "on" : ""}`} onClick={() => playCut(cut)}>
-              <strong>{cut.label}</strong><span>{cut.blurb}</span>
-              <small>{cut.clip_count ? `${cut.clip_count} clips · ` : ""}explains the whole game</small>
-              <span className="reel-tier-play">▶ {cut.clips.length ? "Play + explain" : "Explain"}</span>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {playlist && playlist.clips.length > 0 && <ReelPlayer playlist={playlist} onClose={() => setPlaylist(null)} />}
-      {noVideo && !isLoading && <p className="panel-note">No highlight video for this game — here's the agent's explainer instead.</p>}
-
-      {shownCut && (
-        <div className="game-talk">
-          <div className="panel-heading">
-            <div><span>Game deep dive · {shownCut.label}</span><h2>What happened in this game</h2></div>
-          </div>
-          <div className="recap-content"><ReactMarkdown>{shownCut.explainer || ""}</ReactMarkdown></div>
-          <VoiceScriptPanel script={shownCut.voice_script} source={shownCut.voice_source} />
-        </div>
-      )}
-
-      {playlist?.voiceScript && <VoiceScriptPanel script={playlist.voiceScript} source={playlist.voiceSource} />}
-
-      {game && <ReelDirector key={game.id} gameId={game.id} onReel={(p) => { setPlaylist(p); setActiveCut(null); }} />}
-    </section>
-  );
-}
-
 /* ── Extras: picks / roster / leaders ── */
 function PicksPanel({ league }: { league: League }) {
   const { data: upcoming = [] } = useUpcomingGames() as { data?: { id: number; sport: string; game_date: string | null; home_team: { id: number; name: string | null }; away_team: { id: number; name: string | null } }[] };
@@ -735,21 +569,21 @@ function FeatureSpotlight() {
     <div className="feature-spotlight">
       <button className="fs-card fs-dream" onClick={() => navigate("/dream-team")}>
         <span className="fs-badge">NEW</span>
-        <strong>🏆 Dream Team Simulator</strong>
-        <p>Draft real stars and run 10,000 Monte-Carlo seasons for your championship odds + a shareable card.</p>
+        <strong>Dream Team Simulator</strong>
+        <p>Draft real stars and run 10,000 Monte-Carlo seasons for your championship odds.</p>
         <span className="fs-go">Build your squad →</span>
       </button>
       <button className="fs-card fs-reel" onClick={() => navigate("/reels")}>
         <span className="fs-badge">NEW</span>
-        <strong>🎙️ Narrated Reels + Ask</strong>
-        <p>Voiced highlight reels of your teams' games — pause anytime and ask the analyst by mic or text.</p>
-        <span className="fs-go">Open the reel studio →</span>
+        <strong>AI Reel Director</strong>
+        <p>Tell the AI what reel to build in plain language — or launch a full Broadcast mode.</p>
+        <span className="fs-go">Open reel director →</span>
       </button>
-      <button className="fs-card fs-season" onClick={() => navigate("/season")}>
+      <button className="fs-card fs-season" onClick={() => navigate("/newsletter")}>
         <span className="fs-badge">NEW</span>
-        <strong>📊 Season View</strong>
-        <p>Every game from your teams' last 10 seasons, with form charts — moved out of the dashboard.</p>
-        <span className="fs-go">See the season →</span>
+        <strong>Weekly Newsletter</strong>
+        <p>Your personalized sports digest — team results, player stats, hot takes, and picks.</p>
+        <span className="fs-go">Read this week's issue →</span>
       </button>
     </div>
   );
@@ -788,7 +622,6 @@ export default function Feed() {
   const games: Game[] = ((feed?.games ?? []) as Game[]).filter((g) => g.sport === league);
   const onboarded = feed?.onboarded ?? false;
   const live = (liveData?.games ?? []) as Game[];
-  const reelGames = games.length ? games : live;
   const latestFinal = games.find((g) => g.status === "final");
 
   return (
@@ -797,6 +630,8 @@ export default function Feed() {
         <Link to="/" className="dash-brand"><img src="/replaysai-logo.svg" alt="" />Replays<b>AI</b></Link>
         <nav className="dash-nav">
           {TABS.map((tab) => <button key={tab.id} className={activeTab === tab.id ? "on" : ""} onClick={() => navigate(tab.path)}>{tab.label}</button>)}
+          <Link to="/reels" className="dash-nav-link">Reels <span className="nav-new">NEW</span></Link>
+          <Link to="/newsletter" className="dash-nav-link">Newsletter <span className="nav-new">NEW</span></Link>
           <Link to="/dream-team" className="dash-nav-link">Dream Team <span className="nav-new">NEW</span></Link>
         </nav>
         <div className="dash-side-card"><span>Following</span><strong>{favoriteTeams.length} teams · {followedPlayers.length} players</strong><Link to="/demo">Edit teams / players</Link></div>
@@ -857,8 +692,6 @@ export default function Feed() {
             </section>
           </>
         )}
-
-        {activeTab === "reels" && <ReelsPanel games={reelGames} league={league} />}
 
         {activeTab === "extras" && (
           <>
