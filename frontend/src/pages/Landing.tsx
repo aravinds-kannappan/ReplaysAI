@@ -4,7 +4,6 @@ import axios from "axios";
 import { apiPath } from "../lib/api";
 import "./Landing.css";
 
-/* ── Waitlist (unchanged contract) ── */
 function Waitlist() {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "ok" | "error">("idle");
@@ -15,117 +14,34 @@ function Waitlist() {
     setStatus("loading");
     try {
       const res = await axios.post(apiPath("/api/waitlist"), { email: email.trim(), source: "landing" });
-      if (res.data?.status === "ok") {
-        setStatus("ok");
-        setMessage(res.data.message || "You're on the list.");
-        setEmail("");
-      } else {
-        setStatus("error");
-        setMessage(res.data?.message || "Please enter a valid email.");
-      }
-    } catch {
-      setStatus("error");
-      setMessage("Could not reach the waitlist service. Try again.");
-    }
+      if (res.data?.status === "ok") { setStatus("ok"); setMessage(res.data.message || "You're on the list."); setEmail(""); }
+      else { setStatus("error"); setMessage(res.data?.message || "Please enter a valid email."); }
+    } catch { setStatus("error"); setMessage("Could not reach the waitlist service. Try again."); }
   }
   return (
     <form className="waitlist" onSubmit={submit}>
-      <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" aria-label="Email for waitlist" />
-      <button type="submit" disabled={status === "loading"}>{status === "loading" ? "Joining..." : "Join waitlist"}</button>
+      <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="your@email.com" aria-label="Email for waitlist" />
+      <button type="submit" disabled={status === "loading"}>{status === "loading" ? "Joining…" : "Get updates"}</button>
       {status === "ok" && <p className="waitlist-msg ok">{message}</p>}
       {status === "error" && <p className="waitlist-msg error">{message}</p>}
     </form>
   );
 }
 
-/* ── The four named specialist agents ── */
-const AGENTS = [
-  { id: "scout", name: "ScoutAgent", role: "player tracking", blurb: "Reads the floor in real time — spacing, the transition trigger, who's open." },
-  { id: "stat", name: "StatAgent", role: "live numbers", blurb: "Surfaces the stat line and run that actually decide the possession." },
-  { id: "ref", name: "RefAgent", role: "rulebook", blurb: "Explains the call — verticality, continuation, the clause behind the whistle." },
-  { id: "predict", name: "PredictAgent", role: "win probability", blurb: "Moves the win-probability arc as the play swings the game." },
-] as const;
-
-/* A scripted half-court possession the hero loops through. Orb motion is
-   illustrative — the free data feed has no x/y tracking, so this is a stylized
-   broadcast animation, not measured positions. */
 type Pt = { x: number; y: number };
-type Step = { pbp: string; agent: number; players: Pt[]; ball: Pt; hud: string };
-
-const PLAY: Step[] = [
-  {
-    pbp: "Defensive board — guard pushes it in transition.",
-    agent: 0,
-    players: [{ x: 22, y: 50 }, { x: 30, y: 24 }, { x: 30, y: 76 }, { x: 40, y: 40 }, { x: 40, y: 62 }],
-    ball: { x: 22, y: 50 },
-    hud: "Tracking 5 · transition trigger · pace +12",
-  },
-  {
-    pbp: "Swing to the wing, the defense rotates over.",
-    agent: 1,
-    players: [{ x: 35, y: 50 }, { x: 46, y: 20 }, { x: 48, y: 78 }, { x: 52, y: 46 }, { x: 54, y: 62 }],
-    ball: { x: 46, y: 20 },
-    hud: "Team on a 9–2 run · 3PT 41% · +6 paint",
-  },
-  {
-    pbp: "Drive collapses the help defender into the paint.",
-    agent: 2,
-    players: [{ x: 50, y: 50 }, { x: 62, y: 28 }, { x: 58, y: 76 }, { x: 67, y: 48 }, { x: 60, y: 62 }],
-    ball: { x: 67, y: 48 },
-    hud: "Verticality — legal contest, no foul (NBA 12-B)",
-  },
-  {
-    pbp: "Kick-out to the corner — catch and rise.",
-    agent: 3,
-    players: [{ x: 60, y: 54 }, { x: 70, y: 18 }, { x: 86, y: 82 }, { x: 72, y: 50 }, { x: 74, y: 62 }],
-    ball: { x: 86, y: 82 },
-    hud: "Win probability 62% → 71%",
-  },
-  {
-    pbp: "Corner three splashes — the lead extends.",
-    agent: 3,
-    players: [{ x: 62, y: 54 }, { x: 72, y: 18 }, { x: 88, y: 80 }, { x: 74, y: 50 }, { x: 76, y: 62 }],
-    ball: { x: 95, y: 50 },
-    hud: "Win probability 71% → 78% · shot made",
-  },
+const OFF_ZONES: Pt[] = [
+  { x: 0.26, y: 0.5 }, { x: 0.46, y: 0.24 }, { x: 0.5, y: 0.78 },
+  { x: 0.68, y: 0.46 }, { x: 0.78, y: 0.66 },
 ];
-
-function usePrefersReducedMotion() {
-  const [reduced, setReduced] = useState(
-    () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-  );
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const handler = () => setReduced(mq.matches);
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
-  }, []);
-  return reduced;
-}
-
-/* Broadcast phases drive which HUD is active + the live ticker/win-prob. The
-   canvas animation underneath runs continuously, independent of these. */
 const PHASES = [
-  { agent: 0, pbp: "Defensive board — guard ignites the break.", wp: 58, hud: "Tracking 10 · transition" },
-  { agent: 1, pbp: "Swing to the wing, defense scrambles to rotate.", wp: 63, hud: "On a 9–2 run · 3PT 41%" },
-  { agent: 2, pbp: "Drive draws the help — legal verticality, no foul.", wp: 66, hud: "Verticality · clean (12-B)" },
-  { agent: 3, pbp: "Kick-out to the corner, catch and rise…", wp: 71, hud: "Win prob climbing" },
-  { agent: 3, pbp: "Corner three splashes — the lead extends.", wp: 78, hud: "Shot made · +6" },
+  { agent: "Scout", pbp: "Defensive board — guard ignites the break.", wp: 58 },
+  { agent: "Stat", pbp: "Swing to the wing, defense scrambles to rotate.", wp: 63 },
+  { agent: "Ref", pbp: "Drive draws the help — legal verticality, no foul.", wp: 66 },
+  { agent: "Predict", pbp: "Kick-out to the corner, catch and rise…", wp: 71 },
+  { agent: "Predict", pbp: "Corner three splashes — the lead extends.", wp: 78 },
 ];
 
-function CourtHud({ index, active, value }: { index: number; active: boolean; value: string }) {
-  const agent = AGENTS[index];
-  return (
-    <div className={`court-hud hud-${agent.id} ${active ? "active" : ""}`}>
-      <span className="hud-tag">{agent.name} · {agent.role}</span>
-      <strong className="hud-value">{value}</strong>
-    </div>
-  );
-}
-
-/* Continuous canvas court: drifting players, a passing ball with a glowing
-   trail, and a sweeping broadcast scan line. */
-function useCourtCanvas(canvasRef: React.RefObject<HTMLCanvasElement | null>, reduced: boolean) {
+function useCourtCanvas(canvasRef: React.RefObject<HTMLCanvasElement | null>) {
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
@@ -140,283 +56,265 @@ function useCourtCanvas(canvasRef: React.RefObject<HTMLCanvasElement | null>, re
     resize();
     const ro = new ResizeObserver(resize);
     ro.observe(canvas);
-
-    // 5 offensive players, 5 defenders — each drifts within a zone.
-    const off = [
-      { bx: 0.26, by: 0.5, ax: 0.05, ay: 0.16, sx: 0.7, sy: 0.9, px: 0, py: 1 },
-      { bx: 0.46, by: 0.24, ax: 0.06, ay: 0.08, sx: 0.8, sy: 1.1, px: 2, py: 0 },
-      { bx: 0.5, by: 0.78, ax: 0.07, ay: 0.07, sx: 0.6, sy: 0.8, px: 1, py: 3 },
-      { bx: 0.68, by: 0.46, ax: 0.08, ay: 0.12, sx: 0.9, sy: 0.7, px: 4, py: 2 },
-      { bx: 0.78, by: 0.66, ax: 0.06, ay: 0.1, sx: 0.75, sy: 1.0, px: 3, py: 5 },
-    ];
+    const off = OFF_ZONES.map((z, i) => ({ ...z, sx: 0.6 + i * 0.07, sy: 0.7 + i * 0.09, px: i * 1.2, py: i * 0.8 }));
     const posAt = (p: typeof off[number], t: number) => ({
-      x: (p.bx + p.ax * Math.sin(t * p.sx + p.px)) * W,
-      y: (p.by + p.ay * Math.cos(t * p.sy + p.py)) * H,
+      x: (p.x + 0.06 * Math.sin(t * p.sx + p.px)) * W,
+      y: (p.y + 0.07 * Math.cos(t * p.sy + p.py)) * H,
     });
-
-    const trail: { x: number; y: number }[] = [];
-    let holder = 0, prevHolder = 0, passT = 0;
-    let t = 0, raf = 0, last = performance.now();
-
+    const trail: Pt[] = [];
+    let holder = 0, prevHolder = 0, passT = 0, t = 0, raf = 0, last = performance.now();
     const draw = (now: number) => {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now; t += dt;
       ctx.clearRect(0, 0, W, H);
-
-      // court markings
-      ctx.strokeStyle = "rgba(255,255,255,0.10)";
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(W * 0.04, H * 0.1, W * 0.92, H * 0.8);
-      ctx.beginPath(); ctx.moveTo(W / 2, H * 0.1); ctx.lineTo(W / 2, H * 0.9); ctx.stroke();
-      ctx.beginPath(); ctx.arc(W / 2, H / 2, Math.min(W, H) * 0.13, 0, Math.PI * 2); ctx.stroke();
-      ctx.strokeStyle = "rgba(255,179,71,0.55)";
-      ctx.beginPath(); ctx.arc(W * 0.95, H / 2, 5, 0, Math.PI * 2); ctx.stroke();
-      ctx.beginPath(); ctx.arc(W * 0.05, H / 2, 5, 0, Math.PI * 2); ctx.stroke();
-
-      // defenders (dim)
+      // Court lines
+      ctx.strokeStyle = "rgba(255,255,255,0.08)"; ctx.lineWidth = 1;
+      ctx.strokeRect(W * 0.04, H * 0.08, W * 0.92, H * 0.84);
+      ctx.beginPath(); ctx.moveTo(W / 2, H * 0.08); ctx.lineTo(W / 2, H * 0.92); ctx.stroke();
+      ctx.beginPath(); ctx.arc(W / 2, H / 2, Math.min(W, H) * 0.12, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = "rgba(45,140,255,0.3)";
+      ctx.beginPath(); ctx.arc(W * 0.94, H / 2, 4, 0, Math.PI * 2); ctx.stroke();
+      // Defenders (dim)
       for (const p of off) {
-        const q = posAt(p, t + 0.6);
-        ctx.fillStyle = "rgba(120,140,150,0.35)";
-        ctx.beginPath(); ctx.arc(q.x + 16, q.y - 12, 6, 0, Math.PI * 2); ctx.fill();
+        const q = posAt(p, t + 0.7);
+        ctx.fillStyle = "rgba(100,120,140,0.25)";
+        ctx.beginPath(); ctx.arc(q.x + 14, q.y - 10, 5, 0, Math.PI * 2); ctx.fill();
       }
-
-      // ball pass logic
+      // Ball pass
       passT += dt;
-      if (passT > 1.7) { passT = 0; prevHolder = holder; holder = (holder + 1 + Math.floor(Math.random() * 2)) % off.length; }
+      if (passT > 1.8) { passT = 0; prevHolder = holder; holder = (holder + 1 + Math.floor(Math.random() * 2)) % off.length; }
       const e = Math.min(1, passT / 1.0);
       const ease = e < 0.5 ? 2 * e * e : 1 - Math.pow(-2 * e + 2, 2) / 2;
       const a = posAt(off[prevHolder], t), b = posAt(off[holder], t);
       const ball = { x: a.x + (b.x - a.x) * ease, y: a.y + (b.y - a.y) * ease };
-
-      // offensive orbs (glow)
+      // Offensive orbs
       for (let i = 0; i < off.length; i++) {
         const p = posAt(off[i], t);
-        const isHolder = i === holder;
-        const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, isHolder ? 22 : 16);
-        g.addColorStop(0, "rgba(234,255,247,0.95)");
-        g.addColorStop(0.4, "rgba(24,216,143,0.9)");
-        g.addColorStop(1, "rgba(24,216,143,0)");
+        const isH = i === holder;
+        const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, isH ? 20 : 14);
+        g.addColorStop(0, "rgba(220,240,255,0.95)");
+        g.addColorStop(0.35, "rgba(45,140,255,0.85)");
+        g.addColorStop(1, "rgba(45,140,255,0)");
         ctx.fillStyle = g;
-        ctx.beginPath(); ctx.arc(p.x, p.y, isHolder ? 22 : 16, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(p.x, p.y, isH ? 20 : 14, 0, Math.PI * 2); ctx.fill();
       }
-
-      // ball trail
-      trail.push(ball); if (trail.length > 18) trail.shift();
+      // Ball trail
+      trail.push({ ...ball }); if (trail.length > 16) trail.shift();
       for (let i = 0; i < trail.length; i++) {
-        const alpha = (i / trail.length) * 0.5;
-        ctx.fillStyle = `rgba(255,179,71,${alpha})`;
-        ctx.beginPath(); ctx.arc(trail[i].x, trail[i].y, 2 + (i / trail.length) * 4, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = `rgba(249,115,22,${(i / trail.length) * 0.45})`;
+        ctx.beginPath(); ctx.arc(trail[i].x, trail[i].y, 1.5 + (i / trail.length) * 3.5, 0, Math.PI * 2); ctx.fill();
       }
-      const bg = ctx.createRadialGradient(ball.x, ball.y, 0, ball.x, ball.y, 12);
-      bg.addColorStop(0, "rgba(255,242,207,1)");
-      bg.addColorStop(1, "rgba(255,179,71,0)");
+      const bg = ctx.createRadialGradient(ball.x, ball.y, 0, ball.x, ball.y, 10);
+      bg.addColorStop(0, "rgba(255,240,200,1)");
+      bg.addColorStop(1, "rgba(249,115,22,0)");
       ctx.fillStyle = bg;
-      ctx.beginPath(); ctx.arc(ball.x, ball.y, 12, 0, Math.PI * 2); ctx.fill();
-
-      // broadcast scan line
-      const scanX = ((t * 0.12) % 1) * W;
-      const sg = ctx.createLinearGradient(scanX - 40, 0, scanX + 40, 0);
-      sg.addColorStop(0, "rgba(66,214,255,0)");
-      sg.addColorStop(0.5, "rgba(66,214,255,0.10)");
-      sg.addColorStop(1, "rgba(66,214,255,0)");
-      ctx.fillStyle = sg;
-      ctx.fillRect(scanX - 40, H * 0.1, 80, H * 0.8);
-
-      if (!reduced) raf = requestAnimationFrame(draw);
+      ctx.beginPath(); ctx.arc(ball.x, ball.y, 10, 0, Math.PI * 2); ctx.fill();
+      // Scan line
+      const scanX = ((t * 0.1) % 1) * W;
+      const sg = ctx.createLinearGradient(scanX - 30, 0, scanX + 30, 0);
+      sg.addColorStop(0, "rgba(45,140,255,0)");
+      sg.addColorStop(0.5, "rgba(45,140,255,0.07)");
+      sg.addColorStop(1, "rgba(45,140,255,0)");
+      ctx.fillStyle = sg; ctx.fillRect(scanX - 30, 0, 60, H);
+      raf = requestAnimationFrame(draw);
     };
-
     raf = requestAnimationFrame(draw);
     return () => { cancelAnimationFrame(raf); ro.disconnect(); };
-  }, [canvasRef, reduced]);
+  }, [canvasRef]);
 }
 
-function CourtHero() {
-  const reduced = usePrefersReducedMotion();
+function CourtPanel() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [phase, setPhase] = useState(0);
   const [wp, setWp] = useState(54);
-  useCourtCanvas(canvasRef, reduced);
+  useCourtCanvas(canvasRef);
 
   useEffect(() => {
-    if (reduced) return;
-    const id = window.setInterval(() => setPhase((p) => (p + 1) % PHASES.length), 3000);
+    const id = window.setInterval(() => setPhase((p) => (p + 1) % PHASES.length), 3200);
     return () => window.clearInterval(id);
-  }, [reduced]);
+  }, []);
+
   useEffect(() => {
     const target = PHASES[phase].wp;
-    if (reduced) {
-      const id = window.setTimeout(() => setWp(target), 0);
-      return () => window.clearTimeout(id);
-    }
-    const id = window.setInterval(() => {
-      setWp((v) => (Math.abs(target - v) < 1 ? target : v + Math.sign(target - v)));
-    }, 45);
+    const id = window.setInterval(() => setWp((v) => Math.abs(target - v) < 1 ? target : v + Math.sign(target - v)), 40);
     return () => window.clearInterval(id);
-  }, [phase, reduced]);
+  }, [phase]);
 
   const frame = PHASES[phase];
-
   return (
-    <section className="lp-hero">
-      <div className="lp-noise" aria-hidden />
-      <div className="lp-hero-inner">
-        <div className="lp-hero-copy">
-          <div className="brand-lockup"><img src="/replaysai-logo.svg" alt="ReplaysAI logo" /><span>Replays<b>AI</b></span></div>
-          <span className="lp-kicker">Four specialist agents · one broadcast brain</span>
-          <h1>The Game Has a<br /><em>New Brain.</em></h1>
-          <p>
-            ScoutAgent, StatAgent, RefAgent, and PredictAgent watch every possession together —
-            tracking players, surfacing the numbers, explaining the calls, and moving the win
-            probability live. Then they turn it into a feed and narrated reels built for <strong>you</strong>.
-          </p>
-          <div className="lp-actions">
-            <Link to="/onboarding" className="cta-primary">Assemble Your Squad</Link>
-            <a href="#agents" className="cta-ghost">Meet the agents</a>
+    <div className="lp-court-panel">
+      <canvas ref={canvasRef} className="court-canvas" />
+      {["scout","stat","ref","predict"].map((id, i) => {
+        const labels = ["Scout", "Stat", "Ref", "Predict"];
+        const active = labels[i] === frame.agent;
+        const values = ["Player spacing · pace +12", "9-2 run · 3PT 41%", "Verticality — legal", `${wp}% win prob`];
+        return (
+          <div key={id} className={`court-hud hud-${id} ${active ? "active" : ""}`}>
+            <span className="hud-tag">{labels[i]}Agent</span>
+            <strong className="hud-value">{values[i]}</strong>
           </div>
-        </div>
-
-        <div className="lp-court-wrap" aria-hidden>
-          <div className="lp-court">
-            <canvas ref={canvasRef} className="court-canvas" />
-            {AGENTS.map((_, i) => (
-              <CourtHud
-                key={i}
-                index={i}
-                active={i === frame.agent}
-                value={i === frame.agent ? (i === 3 ? `${wp}% win prob` : frame.hud) : AGENTS[i].role}
-              />
-            ))}
-          </div>
-
-          <div className="court-ticker">
-            <span className="ticker-live">● LIVE</span>
-            <span className="ticker-text" key={phase}>{frame.pbp}</span>
-            <span className="ticker-clock">Q4 · 4:12</span>
-          </div>
-        </div>
+        );
+      })}
+      <div className="court-ticker">
+        <span className="ticker-live">● LIVE</span>
+        <span className="ticker-text" key={phase}>{frame.pbp}</span>
+        <span className="ticker-clock">Q4 · 4:12</span>
       </div>
-    </section>
+    </div>
   );
 }
 
-/* ── Meet the agents ── */
-function MeetTheAgents() {
-  return (
-    <section id="agents" className="lp-section">
-      <span className="lp-kicker">Meet the agents</span>
-      <h2>Four minds on every play.</h2>
-      <div className="agent-grid">
-        {AGENTS.map((a) => (
-          <div key={a.id} className={`agent-card card-${a.id}`}>
-            <span className="agent-card-role">{a.role}</span>
-            <strong>{a.name}</strong>
-            <p>{a.blurb}</p>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-/* ── Interactive "Play Explained" — step through the same possession ── */
-function PlayExplained() {
-  const [step, setStep] = useState(0);
-  const frame = PLAY[step];
-  const agent = AGENTS[frame.agent];
-  return (
-    <section className="lp-section lp-explain">
-      <span className="lp-kicker">See a play explained</span>
-      <h2>Step through the possession.</h2>
-      <div className="explain-wrap">
-        <div className="explain-court" aria-hidden>
-          <div className="court-line court-mid" />
-          <div className="court-hoop court-hoop-r" />
-          {frame.players.map((p, i) => (
-            <div key={i} className="court-orb sm" style={{ left: `${p.x}%`, top: `${p.y}%` }} />
-          ))}
-          <div className="court-ball sm" style={{ left: `${frame.ball.x}%`, top: `${frame.ball.y}%` }} />
-        </div>
-        <div className="explain-panel">
-          <span className={`explain-agent agent-${agent.id}`}>{agent.name}</span>
-          <p className="explain-pbp">{frame.pbp}</p>
-          <p className="explain-hud">{frame.hud}</p>
-          <div className="explain-controls">
-            <button className="cta-ghost" disabled={step === 0} onClick={() => setStep((s) => s - 1)}>← Back</button>
-            <span className="explain-count">{step + 1} / {PLAY.length}</span>
-            <button className="cta-ghost" disabled={step === PLAY.length - 1} onClick={() => setStep((s) => s + 1)}>Next →</button>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ── Feature teasers ── */
-function Teasers() {
-  return (
-    <section className="lp-section">
-      <span className="lp-kicker">What you get</span>
-      <h2>A personalized sports desk.</h2>
-      <div className="teaser-grid">
-        <Link to="/dream-team" className="teaser teaser-dream">
-          <span className="teaser-tag">Dream Team</span>
-          <strong>Simulate 10,000 seasons.</strong>
-          <p>Draft real stars, get championship odds, a projected record, and a shareable result card.</p>
-          <div className="teaser-mock dream-mock">
-            <div className="dm-ring"><span>34%</span></div>
-            <div className="dm-bars"><i style={{ height: "30%" }} /><i style={{ height: "55%" }} /><i style={{ height: "80%" }} /><i className="hot" style={{ height: "62%" }} /></div>
-          </div>
-          <span className="teaser-go">Open the lab →</span>
-        </Link>
-
-        <div className="teaser teaser-qa">
-          <span className="teaser-tag">Ask during live games</span>
-          <strong>Pause and ask anything.</strong>
-          <p>Interrupt a reel or game and ask why a call happened — agents answer with the rulebook and box score.</p>
-          <div className="teaser-mock qa-mock">
-            <div className="qa-bubble user">Was that a legal screen?</div>
-            <div className="qa-bubble ai"><b>RefAgent:</b> Yes — the screener was set and stationary. Legal.</div>
-          </div>
-        </div>
-
-        <div className="teaser teaser-reel">
-          <span className="teaser-tag">Personalized reels</span>
-          <strong>Pulse · Story · Deep Cut.</strong>
-          <p>Narrated highlight reels in 2, 5, or 10 minutes — with overlays and interrupt-and-ask built in.</p>
-          <div className="teaser-mock reel-mock">
-            <span className="reel-tier on">Pulse</span><span className="reel-tier">Story</span><span className="reel-tier">Deep Cut</span>
-          </div>
-        </div>
-
-        <div className="teaser teaser-board">
-          <span className="teaser-tag">Leaderboard</span>
-          <strong>Climb with picks &amp; titles.</strong>
-          <p>Pick'em streaks and Dream Team titles rank you against everyone.</p>
-          <div className="teaser-mock board-mock">
-            {[["1", "You", "1,280"], ["2", "courtvision", "1,140"], ["3", "hoopla", "990"]].map(([r, n, p]) => (
-              <div key={r} className={`board-row ${n === "You" ? "me" : ""}`}><span>{r}</span><b>{n}</b><i>{p}</i></div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
+const FEATURES = [
+  { icon: "📡", title: "Live tracking", desc: "Four AI agents watch every possession simultaneously — scout, stats, rules, and win probability." },
+  { icon: "🎬", title: "AI Reel Director", desc: "Tell the AI what reel you want in plain language. 2-min pulse, 5-min story, or 10-min deep cut." },
+  { icon: "🎙️", title: "Broadcast mode", desc: "Two-host AI podcast about any game — like NotebookLM for sports. Plays in your browser." },
+  { icon: "📰", title: "Weekly newsletter", desc: "Personalized digest for your teams and followed players, generated fresh every week." },
+  { icon: "🏆", title: "Dream Team Sim", desc: "Draft real stars and run 10,000 Monte-Carlo seasons for championship odds." },
+  { icon: "🎯", title: "Pick'em & leaderboard", desc: "Make game picks, track your streak, and climb the leaderboard against everyone." },
+];
 
 export default function Landing() {
   return (
     <main className="lp">
-      <CourtHero />
-      <MeetTheAgents />
-      <PlayExplained />
-      <Teasers />
+      {/* Nav */}
+      <nav className="lp-nav">
+        <Link to="/" className="lp-nav-brand">
+          <img src="/replaysai-logo.svg" alt="ReplaysAI" />
+          Replays<b>AI</b>
+        </Link>
+        <div className="lp-nav-links">
+          <a href="#features" className="lp-nav-link">Features</a>
+          <a href="#how" className="lp-nav-link">How it works</a>
+          <Link to="/onboarding" className="cta-primary" style={{ padding: "9px 18px", fontSize: "0.88rem" }}>Get started</Link>
+        </div>
+      </nav>
 
+      {/* Hero */}
+      <section className="lp-hero">
+        <div className="lp-hero-copy">
+          <span className="lp-eyebrow">AI sports intelligence</span>
+          <h1>Your teams.<br />Your stats.<br /><em>Your feed.</em></h1>
+          <p className="lp-hero-desc">
+            Four AI agents track every game for your teams — live scores, player stats for every position,
+            narrated reels, and a weekly digest. No signup. Just pick your teams and go.
+          </p>
+          <div className="lp-hero-actions">
+            <Link to="/onboarding" className="cta-primary big">Pick your teams</Link>
+            <a href="#features" className="cta-ghost">See what's included</a>
+          </div>
+          <div className="lp-hero-meta">
+            <span><strong>NBA + NFL</strong> covered</span>
+            <span><strong>Free</strong> to use</span>
+            <span><strong>No</strong> signup needed</span>
+          </div>
+        </div>
+        <CourtPanel />
+      </section>
+
+      {/* Stats strip */}
+      <div className="stat-strip">
+        {[["2 leagues", "NBA + NFL live data"], ["All positions", "QB, RB, WR, TE, D, NBA all"], ["4 AI agents", "Scout, Stat, Ref, Predict"], ["1 click", "Pick teams, get your feed"]].map(([v, l]) => (
+          <div key={v} className="stat-strip-item">
+            <span className="stat-strip-value">{v}</span>
+            <span className="stat-strip-label">{l}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Features */}
+      <section className="lp-section" id="features">
+        <div className="lp-section-header">
+          <span className="lp-label">Everything included</span>
+          <h2>A full sports desk in your browser.</h2>
+          <p>Live scores, deep stats for every player position, AI reels, broadcast podcasts, a weekly newsletter — all personalized to your teams.</p>
+        </div>
+        <div className="feature-grid">
+          {FEATURES.map((f) => (
+            <div key={f.title} className="feature-card">
+              <div className="feature-icon">{f.icon}</div>
+              <h3>{f.title}</h3>
+              <p>{f.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* How it works */}
+      <section className="lp-section" id="how">
+        <div className="lp-section-header">
+          <span className="lp-label">How it works</span>
+          <h2>Up in under a minute.</h2>
+        </div>
+        <div className="how-steps">
+          {[
+            { n: "01", title: "Pick your teams", desc: "Select your NBA and NFL teams and a handful of star players to follow." },
+            { n: "02", title: "Your feed builds", desc: "Scores, results, standings, and player stats filter instantly to your selections." },
+            { n: "03", title: "Build a reel", desc: "Type what you want — last Celtics game, Jalen Brunson's buckets — and the AI builds it." },
+            { n: "04", title: "Read your newsletter", desc: "Every week, a fresh personalized digest of your teams and players lands on your dashboard." },
+          ].map((s) => (
+            <div key={s.n} className="how-step">
+              <span className="how-num">{s.n}</span>
+              <h3>{s.title}</h3>
+              <p>{s.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Teasers */}
+      <section className="lp-section">
+        <div className="lp-section-header">
+          <span className="lp-label">Explore the tools</span>
+          <h2>More than a scoreboard.</h2>
+        </div>
+        <div className="teaser-grid">
+          <Link to="/dream-team" className="teaser teaser-dream">
+            <span className="teaser-tag">Dream Team</span>
+            <strong>Simulate 10,000 seasons.</strong>
+            <p>Draft real stars, get championship odds, a projected record, and a shareable result card.</p>
+            <div className="teaser-mock">
+              <div className="dm-ring">34%</div>
+              <div className="dm-bars"><i style={{ height: "30%" }} /><i style={{ height: "55%" }} /><i style={{ height: "80%" }} /><i className="hot" style={{ height: "62%" }} /></div>
+            </div>
+            <span className="teaser-go">Open the lab →</span>
+          </Link>
+          <div className="teaser">
+            <span className="teaser-tag">Ask during live games</span>
+            <strong>Pause and ask anything.</strong>
+            <p>Interrupt a reel and ask why a call happened — agents answer with the rulebook and box score.</p>
+            <div className="teaser-mock qa-mock">
+              <div className="qa-bubble user">Was that a legal screen?</div>
+              <div className="qa-bubble ai"><b>RefAgent:</b> Yes — the screener was set and stationary. Legal.</div>
+            </div>
+          </div>
+          <div className="teaser">
+            <span className="teaser-tag">Personalized reels</span>
+            <strong>Pulse · Story · Deep Cut.</strong>
+            <p>Narrated highlight reels in 2, 5, or 10 minutes with broadcast AI voices built in.</p>
+            <div className="teaser-mock reel-mock">
+              <span className="reel-tier on">Pulse</span><span className="reel-tier">Story</span><span className="reel-tier">Deep Cut</span>
+            </div>
+          </div>
+          <div className="teaser">
+            <span className="teaser-tag">Leaderboard</span>
+            <strong>Climb with picks.</strong>
+            <p>Pick'em streaks and Dream Team titles rank you against everyone.</p>
+            <div className="teaser-mock board-mock">
+              {[["1", "You", "1,280"], ["2", "courtvision", "1,140"], ["3", "hoopla", "990"]].map(([r, n, p]) => (
+                <div key={r} className={`board-row ${n === "You" ? "me" : ""}`}><span>{r}</span><b>{n}</b><i>{p}</i></div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Final CTA */}
       <section className="lp-section lp-final">
-        <span className="lp-kicker">No signup. No friction.</span>
-        <h2>Pick your team. The agents do the rest.</h2>
-        <p>Choose your leagues, teams, and stars — ReplaysAI builds your feed, reels, and simulations instantly. Nothing to sign up for.</p>
-        <Link to="/onboarding" className="cta-primary big">Assemble Your Squad</Link>
-        <div className="lp-divider"><span>or get product updates</span></div>
+        <span className="lp-label">No signup. No friction.</span>
+        <h2>Pick your teams. Get your feed.</h2>
+        <p>Choose your leagues, teams, and stars — ReplaysAI builds your personalized dashboard instantly.</p>
+        <Link to="/onboarding" className="cta-primary big">Get started free</Link>
+        <div className="lp-divider"><span>or stay in the loop</span></div>
         <Waitlist />
       </section>
     </main>

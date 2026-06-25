@@ -446,7 +446,29 @@ _NBA_STAT_LINE = [
     ("avgPoints", "PPG"), ("avgRebounds", "RPG"), ("avgAssists", "APG"),
     ("avgSteals", "SPG"), ("avgBlocks", "BPG"), ("gamesPlayed", "GP"),
 ]
-_NFL_STAT_LINE = [
+
+# Position-specific NFL stat lines — shown for the player's actual position
+_NFL_STAT_LINE_QB = [
+    ("passingYards", "Pass Yds"), ("passingTouchdowns", "Pass TD"),
+    ("completionPct", "Comp%"), ("rushingYards", "Rush Yds"), ("interceptions", "INT"),
+]
+_NFL_STAT_LINE_RB = [
+    ("rushingYards", "Rush Yds"), ("rushingTouchdowns", "Rush TD"),
+    ("rushingYardsPerCarry", "Yds/Car"), ("receptions", "Rec"), ("receivingYards", "Rec Yds"),
+]
+_NFL_STAT_LINE_WR_TE = [
+    ("receptions", "Rec"), ("receivingYards", "Rec Yds"), ("receivingTouchdowns", "Rec TD"),
+    ("receivingYardsPerReception", "Yds/Rec"), ("targets", "Tgts"),
+]
+_NFL_STAT_LINE_DL_LB = [
+    ("totalTackles", "Tackles"), ("sacks", "Sacks"), ("tacklesForLoss", "TFL"),
+    ("quarterbackHits", "QB Hits"), ("interceptions", "INT"),
+]
+_NFL_STAT_LINE_DB = [
+    ("interceptions", "INT"), ("passesDefended", "PD"), ("totalTackles", "Tackles"),
+    ("sacks", "Sacks"), ("forcedFumbles", "FF"),
+]
+_NFL_STAT_LINE_GENERIC = [
     ("passingYards", "Pass Yds"), ("passingTouchdowns", "Pass TD"),
     ("rushingYards", "Rush Yds"), ("rushingTouchdowns", "Rush TD"),
     ("receivingYards", "Rec Yds"), ("receivingTouchdowns", "Rec TD"),
@@ -718,7 +740,7 @@ def fetch_espn_athlete_stats(sport: str, ids: list[int]) -> dict[int, dict]:
     except Exception:
         return {}
 
-    spec = _NBA_STAT_LINE if sport_key == "NBA" else _NFL_STAT_LINE
+    spec = _NBA_STAT_LINE if sport_key == "NBA" else None
     out: dict[int, dict] = {}
     for item in athletes:
         athlete = item.get("athlete", {})
@@ -726,8 +748,25 @@ def fetch_espn_athlete_stats(sport: str, ids: list[int]) -> dict[int, dict]:
         if not aid or int(aid) not in want:
             continue
         flat = _flatten_athlete_stats(item, names_by_cat)
+        # Pick the right stat line for NFL based on position
+        if sport_key == "NFL":
+            position = str((athlete.get("position") or {}).get("abbreviation") or "").upper()
+            if position == "QB":
+                stat_spec = _NFL_STAT_LINE_QB
+            elif position == "RB" or position == "FB":
+                stat_spec = _NFL_STAT_LINE_RB
+            elif position in ("WR", "TE"):
+                stat_spec = _NFL_STAT_LINE_WR_TE
+            elif position in ("DE", "DT", "NT", "EDGE", "LB", "MLB", "OLB", "ILB"):
+                stat_spec = _NFL_STAT_LINE_DL_LB
+            elif position in ("CB", "S", "FS", "SS", "DB"):
+                stat_spec = _NFL_STAT_LINE_DB
+            else:
+                stat_spec = _NFL_STAT_LINE_GENERIC
+        else:
+            stat_spec = spec
         line = []
-        for name, label in spec:
+        for name, label in stat_spec:
             value = flat.get(name)
             if value:
                 line.append({"label": label, "value": round(value, 1) if isinstance(value, float) else value})
