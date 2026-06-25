@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     redis_url: str = ""
     clerk_secret_key: str = ""
     clerk_issuer: str = ""  # e.g. https://clerk.yourdomain.com for custom Clerk domains
-    allowed_origins: str = "http://localhost:5173,http://localhost:3000"
+    allowed_origins: str = "*"
 
     class Config:
         env_file = ".env"
