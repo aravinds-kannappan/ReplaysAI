@@ -4,7 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { apiPath } from "../lib/api";
 import { useCurrentUser } from "../hooks/useUser";
-import StoryReelPlayer, { type Story } from "../components/StoryReelPlayer";
 import ReelPlayer, { type Clip } from "../components/ReelPlayer";
 import "./ReelsBroadcastNewsletter.css";
 
@@ -53,7 +52,6 @@ export default function ReelsPage() {
   const [intent, setIntent] = useState<IntentResult | null>(null);
   const [confirmedGameId, setConfirmedGameId] = useState<number | null>(null);
   const [confirmedSeconds, setConfirmedSeconds] = useState(300);
-  const [story, setStory] = useState<Story | null>(null);
   const [playlist, setPlaylist] = useState<{ label: string; clips: Clip[] } | null>(null);
   const [narration, setNarration] = useState<NarrationData | null>(null);
   const [loadingNarration, setLoadingNarration] = useState(false);
@@ -83,7 +81,6 @@ export default function ReelsPage() {
     setResolving(true);
     setIntent(null);
     setConfirmedGameId(null);
-    setStory(null);
     setPlaylist(null);
     setNarration(null);
     try {
@@ -114,7 +111,6 @@ export default function ReelsPage() {
   function confirmAndBuild(gameId: number, seconds: number) {
     setConfirmedGameId(gameId);
     setConfirmedSeconds(seconds);
-    setStory(null);
     setPlaylist(null);
   }
 
@@ -129,16 +125,9 @@ export default function ReelsPage() {
     }
   }
 
-  function openStoryReels() {
-    if (!reelData?.cuts) return;
-    const cut = reelData.cuts[0];
-    if (cut?.story) setStory(cut.story);
-  }
-
   function playVideoReel(cut: ReelCut) {
     if (cut.clips.length > 0) {
       setPlaylist({ label: cut.label, clips: cut.clips });
-      setStory(null);
     }
   }
 
@@ -147,15 +136,6 @@ export default function ReelsPage() {
 
   return (
     <div className="reels-page">
-      {story && (
-        <StoryReelPlayer
-          story={story}
-          awayAbbr={intent?.game_label?.split("@")[0]?.trim() ?? "AWY"}
-          homeAbbr={intent?.game_label?.split("@")[1]?.split(" ")[0]?.trim() ?? "HME"}
-          onClose={() => setStory(null)}
-        />
-      )}
-
       {playlist && <ReelPlayer playlist={playlist} onClose={() => setPlaylist(null)} />}
 
       <div className="rp-shell">
@@ -295,9 +275,6 @@ export default function ReelsPage() {
                         ▶ Play video reel
                       </button>
                     )}
-                    <button className="btn-ghost" onClick={openStoryReels}>
-                      Story mode
-                    </button>
                     <button
                       className="btn-ghost"
                       disabled={loadingNarration}
@@ -330,7 +307,13 @@ export default function ReelsPage() {
           {!reelLoading && cuts.length === 0 && (
             <div className="rp-empty">
               <p>No highlight clips published for this game yet.</p>
-              <p>Story mode and narration scripts are still available — <button className="btn-ghost" onClick={openStoryReels}>open story mode</button></p>
+              <p>You can still get a full AI breakdown:</p>
+              <div className="rp-empty-actions">
+                <button className="btn-primary" onClick={() => navigate(`/broadcast/${gameId}`)}>🎙 Broadcast mode</button>
+                <button className="btn-ghost" disabled={loadingNarration} onClick={() => void fetchNarration(confirmedSeconds)}>
+                  {loadingNarration ? "Loading…" : "Get narration script"}
+                </button>
+              </div>
             </div>
           )}
         </div>

@@ -12,7 +12,7 @@ from datetime import date
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from api.espn_public import fetch_espn_games
+from api.espn_public import fetch_espn_games, fetch_espn_team_schedule, fetch_espn_teams
 from api.recaps import llm_text
 from config import get_settings
 
@@ -38,18 +38,35 @@ def _gather_recent_games(favorite_teams: list[str]) -> list[dict]:
     abbrs = {t.split(":")[1].upper() for t in favorite_teams if ":" in t}
     games: list[dict] = []
     seen: set[int] = set()
+
+    def _consider(g: dict) -> None:
+        if g.get("id") in seen or g.get("away_score") is None:
+            return
+        seen.add(g["id"])
+        games.append(g)
+
+    # Pull each followed team's own schedule so the digest always has their real
+    # recent results, even when they aren't in the league-wide recent window
+    # (e.g. eliminated from the playoffs).
+    if abbrs:
+        for sport in sports:
+            try:
+                team_ids = {t["abbreviation"].upper(): t["id"] for t in fetch_espn_teams(sport)}
+            except Exception:
+                team_ids = {}
+            for abbr in abbrs:
+                team_id = team_ids.get(abbr)
+                if team_id is not None:
+                    for g in fetch_espn_team_schedule(sport, team_id):
+                        _consider(g)
+
     for sport in sports:
         for g in fetch_espn_games(sport, limit=40, seasons=1):
-            if g.get("id") in seen:
-                continue
             h = (g.get("home_team") or {}).get("abbreviation", "").upper()
             a = (g.get("away_team") or {}).get("abbreviation", "").upper()
             if abbrs and not (abbrs & {h, a}):
                 continue
-            if g.get("away_score") is None:
-                continue
-            seen.add(g["id"])
-            games.append(g)
+            _consider(g)
     games.sort(key=lambda g: g.get("game_date") or "", reverse=True)
     return games[:12]
 

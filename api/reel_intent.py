@@ -8,7 +8,7 @@ import re
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from api.espn_public import fetch_espn_games
+from api.espn_public import fetch_espn_games, fetch_espn_team_schedule, fetch_espn_teams
 from config import get_settings
 
 router = APIRouter(prefix="/api/reels", tags=["reels-intent"])
@@ -37,23 +37,45 @@ def _candidate_games(favorite_teams: list[str], limit: int = 60) -> list[dict]:
     sports = list({t.split(":")[0].upper() for t in favorite_teams if ":" in t}) or ["NBA", "NFL"]
     abbrs = {t.split(":")[1].upper() for t in favorite_teams if ":" in t}
 
+    def _consider(g: dict) -> None:
+        if g.get("id") in seen:
+            return
+        # Only games that have actually been played make good reels/broadcasts.
+        # Scheduled games report 0-0 (not null) and sort to the top by date, so
+        # excluding them keeps "last game" on a real, highlightable game.
+        if g.get("status") == "scheduled":
+            return
+        if g.get("status") != "live" and g.get("away_score") is None and g.get("home_score") is None:
+            return
+        seen.add(g["id"])
+        games.append(g)
+
+    # When the fan picked teams, pull each team's own schedule first. The
+    # league-wide window only surfaces teams that played in the last day or two,
+    # so a team that isn't currently playing (e.g. eliminated, or on an off day)
+    # would otherwise return "no games found".
+    if abbrs:
+        for sport in sports:
+            try:
+                team_ids = {t["abbreviation"].upper(): t["id"] for t in fetch_espn_teams(sport)}
+            except Exception:
+                team_ids = {}
+            for abbr in abbrs:
+                team_id = team_ids.get(abbr)
+                if team_id is None:
+                    continue
+                for g in fetch_espn_team_schedule(sport, team_id):
+                    _consider(g)
+
+    # League-wide recent games as additional candidates (and the only source when
+    # no teams are picked yet).
     for sport in sports:
         for g in fetch_espn_games(sport, limit=limit, seasons=3):
-            if g.get("id") in seen:
-                continue
-            # Only games that have actually been played make good reels/broadcasts.
-            # Scheduled games report 0-0 (not null) and sort to the top by date, so
-            # excluding them by status keeps "last game" on a real, highlightable game.
-            if g.get("status") == "scheduled":
-                continue
-            if g.get("status") != "live" and g.get("away_score") is None and g.get("home_score") is None:
-                continue
             h_abbr = (g.get("home_team") or {}).get("abbreviation", "").upper()
             a_abbr = (g.get("away_team") or {}).get("abbreviation", "").upper()
             if abbrs and not (abbrs & {h_abbr, a_abbr}):
                 continue
-            seen.add(g["id"])
-            games.append(g)
+            _consider(g)
     games.sort(key=lambda g: g.get("game_date") or "", reverse=True)
     return games[:40]
 

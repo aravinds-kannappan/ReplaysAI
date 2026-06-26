@@ -272,6 +272,71 @@ def fetch_espn_games(sport: str, date: str | None = None, limit: int = 20, seaso
     return games
 
 
+def fetch_espn_team_schedule(sport: str, team_id: str | int, limit: int = 24) -> list[dict]:
+    """A single team's games from ESPN's team-schedule endpoint.
+
+    The league-wide recent-games window only surfaces teams that played in the
+    last day or two, so a fan's team can be missing entirely (e.g. eliminated
+    from the playoffs). Pulling the team's own schedule guarantees their recent
+    games are available for reels, broadcasts and newsletters.
+
+    Schedule events differ from scoreboard events: status lives on the
+    competition and scores are {value, displayValue} objects, so this parses
+    them directly rather than reusing `_event_to_game`.
+    """
+    keys = get_league_keys(sport)
+    url = f"{ESPN_SITE_BASE}/{keys['sport']}/{keys['league']}/teams/{team_id}/schedule"
+    year = _current_season_year(sport)
+    games_by_id: dict[int, dict] = {}
+
+    def _sched_score(competitor: dict):
+        score = competitor.get("score")
+        if isinstance(score, dict):
+            score = score.get("value")
+        return _score_value(score)
+
+    def _load(params: Optional[dict]) -> None:
+        try:
+            data = _get_json(url, params)
+        except Exception:
+            return
+        for event in data.get("events", []):
+            competition = (event.get("competitions") or [{}])[0]
+            competitors = competition.get("competitors") or []
+            home = next((c for c in competitors if c.get("homeAway") == "home"), None)
+            away = next((c for c in competitors if c.get("homeAway") == "away"), None)
+            event_id = str(event.get("id") or "")
+            if not home or not away or not event_id or int(event_id) in games_by_id:
+                continue
+            home_team = _team_from_competitor(home, sport)
+            away_team = _team_from_competitor(away, sport)
+            games_by_id[int(event_id)] = {
+                "id": int(event_id),
+                "external_id": event_id,
+                "sport": sport.upper(),
+                "status": _status_from_event({"status": competition.get("status") or event.get("status")}),
+                "game_date": _parse_espn_datetime(event.get("date")),
+                "home_team": {"id": home_team["id"], "name": home_team["name"], "abbreviation": home_team["abbreviation"]},
+                "away_team": {"id": away_team["id"], "name": away_team["name"], "abbreviation": away_team["abbreviation"]},
+                "home_score": _sched_score(home),
+                "away_score": _sched_score(away),
+                "video_url": None,
+            }
+
+    # Default view = current postseason for playoff teams; the explicit regular
+    # season query always returns games (including teams that missed the
+    # playoffs and so have an empty default view, e.g. Golden State).
+    _load(None)
+    _load({"season": year, "seasontype": 2})
+    if not any(g.get("status") in ("final", "live") for g in games_by_id.values()):
+        # Deep offseason before the new season is populated — use last season.
+        _load({"season": year - 1, "seasontype": 3})
+        _load({"season": year - 1, "seasontype": 2})
+
+    games = sorted(games_by_id.values(), key=lambda g: g.get("game_date") or "", reverse=True)
+    return games[:limit]
+
+
 def fetch_espn_game_summary(sport: str, event_id: str | int) -> dict:
     keys = get_league_keys(sport)
     return _get_json(

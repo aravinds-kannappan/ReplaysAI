@@ -28,7 +28,34 @@ from config import get_settings
 router = APIRouter(prefix="/api/games", tags=["broadcast"])
 
 TIER_SECONDS = {120: "2min", 300: "5min", 600: "10min"}
-TIER_TURNS = {120: 12, 300: 30, 600: 60}
+TIER_TURNS = {120: 12, 300: 26, 600: 44}
+
+
+def _extract_turns(raw: str) -> list[dict]:
+    """Parse the model's turn array, tolerating a response that was truncated
+    before its closing bracket by salvaging each complete {...} object.
+
+    The model grounds every turn in real game data, so responses run long; an
+    undersized token budget used to truncate the JSON and silently drop the whole
+    broadcast to the templated fallback. Salvaging keeps the real turns we got.
+    """
+    match = re.search(r"\[.*\]", raw, re.DOTALL)
+    if match:
+        try:
+            data = json.loads(match.group(0))
+            if isinstance(data, list):
+                return [t for t in data if isinstance(t, dict)]
+        except json.JSONDecodeError:
+            pass
+    salvaged: list[dict] = []
+    for chunk in re.findall(r"\{[^{}]*\}", raw, re.DOTALL):
+        try:
+            obj = json.loads(chunk)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(obj, dict) and obj.get("text"):
+            salvaged.append(obj)
+    return salvaged
 
 
 def _build_broadcast_llm(facts: dict, seconds: int) -> list[dict] | None:
@@ -56,8 +83,10 @@ def _build_broadcast_llm(facts: dict, seconds: int) -> list[dict] | None:
         for p in key_plays[:20]
     )
 
-    n_turns = TIER_TURNS.get(seconds, 30)
-    max_tokens = 900 if seconds <= 120 else 2200 if seconds <= 300 else 4000
+    n_turns = TIER_TURNS.get(seconds, 26)
+    # Turns are grounded in real data and run ~80 tokens each; budget generously
+    # so the JSON array is never truncated mid-broadcast.
+    max_tokens = 2400 if seconds <= 120 else 5200 if seconds <= 300 else 8000
 
     winner = h.get("name") if (hs or 0) >= (as_ or 0) else a.get("name")
     margin = abs((hs or 0) - (as_ or 0))
@@ -122,11 +151,8 @@ def _build_broadcast_llm(facts: dict, seconds: int) -> list[dict] | None:
                 print(f"[broadcast] {model}: {exc}")
         if not raw:
             return None
-        m = re.search(r"\[.*\]", raw, re.DOTALL)
-        if not m:
-            return None
-        turns = json.loads(m.group(0))
-        if not isinstance(turns, list):
+        turns = _extract_turns(raw)
+        if not turns:
             return None
         cleaned = []
         for t in turns:
