@@ -5,7 +5,7 @@ import axios from "axios";
 import { apiPath } from "../lib/api";
 import { useCurrentUser } from "../hooks/useUser";
 import ReelPlayer, { type Clip } from "../components/ReelPlayer";
-import NarratedReelPlayer, { type NarratedReel } from "../components/NarratedReelPlayer";
+import StoryReelPlayer, { type Story } from "../components/StoryReelPlayer";
 import "./ReelsBroadcastNewsletter.css";
 
 type IntentResult = {
@@ -54,7 +54,7 @@ export default function ReelsPage() {
   const [confirmedGameId, setConfirmedGameId] = useState<number | null>(null);
   const [confirmedSeconds, setConfirmedSeconds] = useState(300);
   const [playlist, setPlaylist] = useState<{ label: string; clips: Clip[] } | null>(null);
-  const [reel, setReel] = useState<NarratedReel | null>(null);
+  const [reel, setReel] = useState<Story | null>(null);
   const [buildingReel, setBuildingReel] = useState(false);
   const [pendingPlay, setPendingPlay] = useState(false);
   const [narration, setNarration] = useState<NarrationData | null>(null);
@@ -135,41 +135,34 @@ export default function ReelsPage() {
     }
   }
 
-  // The primary "build" action: fetch the AI voice-over for this tier and play a
-  // spoken, narrated reel — works whether or not ESPN published highlight clips.
-  async function buildAndPlayReel(cut: ReelCut, label: string) {
-    const gid = cut ? gameId : confirmedGameId ?? intent?.game_id;
+  // The primary "build" action: fetch the animated, voiced story-reel scenes for
+  // this tier and play them — works whether or not ESPN published video clips.
+  async function buildAndPlayReel(cut: ReelCut) {
+    const gid = confirmedGameId ?? intent?.game_id;
     if (!gid) return;
     setBuildingReel(true);
-    let script = "";
     try {
-      const res = await axios.get(apiPath(`/api/games/${gid}/reels/narration`), { params: { seconds: cut.target_seconds } });
-      script = (res.data?.voice_script || res.data?.explainer || "") as string;
+      const res = await axios.get(apiPath(`/api/games/${gid}/reels/story`), { params: { seconds: cut.target_seconds } });
+      setReel(res.data as Story);
     } catch {
-      /* fall back to a script-less reel */
+      /* leave the page as-is on failure */
     } finally {
       setBuildingReel(false);
     }
-    setReel({
-      label,
-      gameLabel: intent?.game_label || "",
-      script,
-      clips: cut.clips,
-    });
   }
 
   // "Build this reel" sets the game, then this plays it once the cuts load.
   useEffect(() => {
     if (!pendingPlay || reelLoading || !activeCut) return;
     setPendingPlay(false);
-    void buildAndPlayReel(activeCut, activeCut.label);
+    void buildAndPlayReel(activeCut);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingPlay, reelLoading, activeCut]);
 
   return (
     <div className="reels-page">
       {playlist && <ReelPlayer playlist={playlist} onClose={() => setPlaylist(null)} />}
-      {reel && <NarratedReelPlayer reel={reel} onClose={() => setReel(null)} />}
+      {reel && <StoryReelPlayer story={reel} awayAbbr={reel.away_abbr || ""} homeAbbr={reel.home_abbr || ""} onClose={() => setReel(null)} />}
 
       <div className="rp-shell">
       <header className="rp-header">
@@ -304,8 +297,8 @@ export default function ReelsPage() {
                     <span>{activeCut.clip_count} clips · ~{Math.round(activeCut.duration_seconds / 60)} min</span>
                   </div>
                   <div className="rp-cut-actions">
-                    <button className="btn-primary" disabled={buildingReel} onClick={() => void buildAndPlayReel(activeCut, activeCut.label)}>
-                      {buildingReel ? "Building…" : "▶ Play narrated reel"}
+                    <button className="btn-primary" disabled={buildingReel} onClick={() => void buildAndPlayReel(activeCut)}>
+                      {buildingReel ? "Building…" : "▶ Play reel"}
                     </button>
                     {activeCut.clips.length > 0 && (
                       <button className="btn-ghost" onClick={() => playVideoReel(activeCut)}>

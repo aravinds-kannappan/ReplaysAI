@@ -366,6 +366,131 @@ def get_reel_cuts(game_id: int):
     }
 
 
+# ── Animated story reels: scenes built from real play-by-play, voiced per scene ──
+
+def _clean_play_desc(desc: str) -> str:
+    text = re.sub(r"\((?:Shotgun|No Huddle|[\d:]+)\)\s*", "", desc or "")
+    return re.sub(r"\s+", " ", text).strip()[:120]
+
+
+def _period_label_short(sport: str, period: int) -> str:
+    if period <= 4:
+        return f"Q{period}"
+    return "OT" if period == 5 else f"OT{period - 4}"
+
+
+_MOMENT_VERB = {
+    "touchdown": "Touchdown", "field_goal": "Field goal", "interception": "Interception",
+    "sack": "Sack", "three_pointer": "Three", "dunk": "Dunk", "shot": "Bucket",
+    "block": "Block", "steal": "Steal", "turnover": "Turnover",
+}
+
+
+def _key_moment_plays(plays: list[dict], max_moments: int) -> list[dict]:
+    """Plays where the score changed or a momentum event happened, spread across
+    the game so the reel shows how the final score was built."""
+    candidates: list[dict] = []
+    prev: tuple = (None, None)
+    for play in plays:
+        away, home = play.get("away_score"), play.get("home_score")
+        if away is None or home is None:
+            continue
+        changed = prev != (None, None) and (away, home) != prev
+        notable = play.get("play_type") in _MOMENT_VERB
+        if (changed or notable) and (away, home) != prev:
+            candidates.append(play)
+        prev = (away, home)
+    if len(candidates) <= max_moments:
+        return candidates
+    step = len(candidates) / max_moments  # even spread across the timeline
+    sampled = [candidates[min(int(i * step), len(candidates) - 1)] for i in range(max_moments)]
+    sampled[-1] = candidates[-1]  # always show the decisive final score change
+    return sampled
+
+
+def _moment_narration(play: dict, aa: str, ha: str) -> str:
+    verb = _MOMENT_VERB.get(play.get("play_type") or "", "")
+    score = f"{aa} {play.get('away_score')}, {ha} {play.get('home_score')}."
+    player = (play.get("player") or "").strip()
+    if not verb:
+        return score
+    lead = f"{player} — " if player else ""
+    return f"{lead}{verb}! {score}"
+
+
+def build_reel_story(sport: str, game: dict, summary: dict, seconds: int) -> dict:
+    """A TikTok-style animated story reel: scenes built from real play-by-play,
+    the scoreboard climbing through each key moment, voiced per scene."""
+    facts = _facts(sport, game, summary)
+    plays = extract_summary_plays(summary, sport, limit=400)
+    a, h = facts["away"], facts["home"]
+    aa = a.get("abbreviation") or "AWY"
+    ha = h.get("abbreviation") or "HME"
+    as_, hs = facts["away_score"], facts["home_score"]
+    leaders = facts["leaders"]
+    lc = facts["lead_changes"]
+
+    max_moments = 5 if seconds <= 120 else 9 if seconds <= 300 else 16
+    moments = _key_moment_plays(plays, max_moments)
+
+    winner = h if (hs or 0) >= (as_ or 0) else a
+    wsc, lsc = max(as_ or 0, hs or 0), min(as_ or 0, hs or 0)
+
+    scenes: list[dict] = [{
+        # Scoreboard opens 0-0 and climbs through the moments — final is the reveal.
+        "type": "title", "duration": 4.0,
+        "heading": f"{aa}  vs  {ha}",
+        "text": f"{a.get('name')} at {h.get('name')}",
+        "score": {"away": 0, "home": 0},
+        "narration": f"{a.get('name')} versus {h.get('name')}. Here's how it played out.",
+    }]
+    for play in moments:
+        period = play.get("period") or 1
+        scenes.append({
+            "type": "moment", "duration": 3.3,
+            "heading": f"{_period_label_short(sport, period)} {play.get('clock') or ''}".strip(),
+            "play_type": play.get("play_type"),
+            "text": _clean_play_desc(play.get("description") or ""),
+            "score": {"away": play.get("away_score"), "home": play.get("home_score")},
+            "narration": _moment_narration(play, aa, ha),
+        })
+    if leaders:
+        top = leaders[: 3 if seconds <= 120 else 5]
+        scenes.append({
+            "type": "stat", "duration": 4.8,
+            "heading": "Who decided it",
+            "stats": [{"label": f"{r['player']} · {r['team']}", "value": r["stat_line"]} for r in top],
+            "score": {"away": as_, "home": hs},
+            "narration": "The players who decided it. " + " ".join(f"{r['player']}, {r['stat_line']}." for r in top[:3]),
+        })
+    scenes.append({
+        "type": "verdict", "duration": 4.4,
+        "heading": f"{winner.get('abbreviation')} WIN",
+        "text": f"{winner.get('name')} take it, {wsc}–{lsc}",
+        "score": {"away": as_, "home": hs},
+        "narration": f"{winner.get('name')} win it, {wsc} to {lsc}" + (f". A {lc}-lead-change thriller." if lc >= 4 else "."),
+    })
+
+    return {
+        "title": f"{aa} @ {ha} · {as_}-{hs}",
+        "sport": sport.upper(),
+        "away_abbr": aa,
+        "home_abbr": ha,
+        "focus": "whole game",
+        "duration_seconds": seconds,
+        "scene_count": len(scenes),
+        "scenes": scenes,
+        "generated_by": "data",
+    }
+
+
+@router.get("/{game_id}/reels/story")
+def get_reel_story(game_id: int, seconds: int = 120):
+    """Animated, voiced story-reel scenes built from real play-by-play."""
+    sport, game_data, summary = _resolve(game_id)
+    return build_reel_story(sport, game_data, summary, seconds)
+
+
 @router.get("/{game_id}/reels/narration")
 def get_reel_narration(game_id: int, seconds: int = 120):
     """On-demand long-form narration for one tier: the spoken voice script + the
