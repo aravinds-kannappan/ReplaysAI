@@ -264,8 +264,8 @@ function NewsletterViz() {
 }
 
 const FEATURES = [
-  { idx: "01", kicker: "Live tracking", title: "Four agents on every possession.", body: "Scout, Stat, Ref and Predict watch the game in parallel — spacing, runs, rulings and win probability, updating play by play.", viz: <AgentsViz />, to: "/onboarding", cta: "See it live" },
-  { idx: "02", kicker: "AI Reel Director", title: "Describe the reel. It builds it.", body: "Type what you want in plain language — a team's last game, every bucket from one player — and get a 2, 5 or 10-minute narrated cut.", viz: <ReelViz />, to: "/reels", cta: "Open the director" },
+  { idx: "01", kicker: "Play breakdown", title: "Four agents break down the key plays.", body: "Tap any scoring play and Scout (alignment), Stat (the numbers), Ref (the rulebook) and Predict (a win-probability proxy) each weigh in. Transparent, rule-based reads — not a black box.", viz: <AgentsViz />, to: "/onboarding", cta: "See a breakdown" },
+  { idx: "02", kicker: "Reel Director", title: "Describe the reel. It builds it.", body: "Type what you want in plain language — a team's last game, every bucket from one player — and get an animated, voiced recap. Game search is powered by Claude.", viz: <ReelViz />, to: "/reels", cta: "Open the director" },
   { idx: "03", kicker: "Broadcast mode", title: "A two-host podcast for any game.", body: "Play-by-play and analyst voices break down what happened and why — grounded in the real box score. NotebookLM, for sports.", viz: <BroadcastViz />, to: "/onboarding", cta: "Hear a broadcast" },
   { idx: "04", kicker: "Weekly newsletter", title: "Your week, written for your teams.", body: "Results, player stats across every position, hot takes and picks — generated fresh each week for the teams and players you follow.", viz: <NewsletterViz />, to: "/newsletter", cta: "Read an issue" },
 ];
@@ -273,7 +273,7 @@ const FEATURES = [
 const NUMBERS = [
   { v: "2", l: "leagues — NBA + NFL, live" },
   { v: "All", l: "positions — QB to safety, G to C" },
-  { v: "4", l: "AI agents on every game" },
+  { v: "4", l: "analysis agents per key play" },
   { v: "0", l: "logins — just pick your teams" },
 ];
 
@@ -305,11 +305,11 @@ export default function Landing() {
       <section className="lp-hero">
         <div className="lp-hero-grid">
           <div className="lp-hero-copy" data-reveal>
-            <span className="lp-eyebrow"><span className="lp-eyebrow-dot" /> Live AI sports intelligence</span>
+            <span className="lp-eyebrow"><span className="lp-eyebrow-dot" /> Your personalized sports desk</span>
             <h1>The game,<br /><span className="lp-grad">decoded</span> for<br />your teams.</h1>
             <p className="lp-hero-sub">
-              Four AI agents track every NBA and NFL game you care about — live, every position,
-              with narrated reels, browser broadcasts and a weekly digest. No signup. Pick your teams and go.
+              Real ESPN data for the NBA and NFL teams you follow — every position, animated voiced reels,
+              key-play breakdowns, in-browser broadcasts and a weekly digest. No signup. Pick your teams and go.
             </p>
             <div className="lp-cta-row">
               <Link to="/onboarding" className="lp-btn-primary">Pick your teams →</Link>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import KeyPlayModal, { type PlayFacts, type PlayAnalysis, type KeyPlay } from "./KeyPlayModal";
 
 export type StoryScene = {
   type: "title" | "moment" | "run" | "break" | "stat" | "verdict";
@@ -11,6 +12,8 @@ export type StoryScene = {
   score?: { away: number | null; home: number | null };
   play_type?: string;
   stats?: { label: string; value: string }[];
+  play?: PlayFacts;
+  analysis?: PlayAnalysis;
 };
 
 export type Story = {
@@ -126,11 +129,19 @@ export default function StoryReelPlayer({
   const [playing, setPlaying] = useState(true);
   const [muted, setMuted] = useState(false);
   const [done, setDone] = useState(false);
+  const [breakdown, setBreakdown] = useState<KeyPlay | null>(null);
   const voiceRef = useRef<SpeechSynthesisVoice | null>(null);
   const advancedRef = useRef(-1);
   const scene = story.scenes[index];
   const away = story.away_abbr || awayAbbr;
   const home = story.home_abbr || homeAbbr;
+
+  function openBreakdown() {
+    if (!scene?.play || !scene?.analysis) return;
+    window.speechSynthesis?.cancel();
+    setPlaying(false);
+    setBreakdown({ play: scene.play, analysis: scene.analysis, awayAbbr: away, homeAbbr: home, heading: scene.heading });
+  }
 
   useEffect(() => {
     if (typeof window === "undefined" || !window.speechSynthesis) return;
@@ -186,6 +197,8 @@ export default function StoryReelPlayer({
   function close() { window.speechSynthesis?.cancel(); onClose(); }
 
   return (
+    <>
+    {breakdown && <KeyPlayModal data={breakdown} onClose={() => setBreakdown(null)} />}
     <div className="sr-overlay" role="dialog" aria-label="Story reel">
       <div className={`sr-reel scene-${scene.type}`}>
         <div className="sr-progress">
@@ -213,6 +226,11 @@ export default function StoryReelPlayer({
             {scene.heading && <div className="sr-heading">{scene.heading}</div>}
 
             {scene.type === "moment" && <PlayViz playType={scene.play_type} sport={story.sport} />}
+            {scene.type === "moment" && scene.play && scene.analysis && (
+              <button className="sr-breakdown" onClick={(e) => { e.stopPropagation(); openBreakdown(); }}>
+                🔬 Break down this play
+              </button>
+            )}
 
             {scene.type === "stat" && scene.stats ? (
               <div className="sr-stats">
@@ -236,9 +254,10 @@ export default function StoryReelPlayer({
           <button className="btn-ghost" disabled={index === 0} onClick={() => jump(index - 1)}>‹</button>
           <button className="sr-play" onClick={togglePlay}>{done ? "↺ Replay" : playing ? "⏸ Pause" : "▶ Play"}</button>
           <button className="btn-ghost" disabled={index >= story.scenes.length - 1} onClick={() => jump(index + 1)}>›</button>
-          <span className="sr-count">{index + 1}/{story.scenes.length}{story.generated_by === "llm" ? " · AI" : ""}</span>
+          <span className="sr-count">{index + 1}/{story.scenes.length}{story.generated_by === "llm" ? " · AI-written" : ""}</span>
         </div>
       </div>
     </div>
+    </>
   );
 }

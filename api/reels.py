@@ -29,6 +29,7 @@ from api.espn_public import (
     fetch_espn_games,
     fetch_espn_summary_by_id,
 )
+from api.play_analysis import PlayContext, analyze_play, parse_fg_distance
 from api.recaps import _lead_changes, _period_scores, llm_text
 from config import get_settings
 
@@ -433,6 +434,17 @@ def build_reel_story(sport: str, game: dict, summary: dict, seconds: int) -> dic
     max_moments = 5 if seconds <= 120 else 9 if seconds <= 300 else 16
     moments = _key_moment_plays(plays, max_moments)
 
+    # Score immediately before each scoring play, so each moment knows its swing.
+    prev_by_id: dict = {}
+    last_score = (0, 0)
+    for play in plays:
+        av, hv = play.get("away_score"), play.get("home_score")
+        if av is None or hv is None:
+            continue
+        if (av, hv) != last_score:
+            prev_by_id[play.get("id")] = last_score
+            last_score = (av, hv)
+
     winner = h if (hs or 0) >= (as_ or 0) else a
     wsc, lsc = max(as_ or 0, hs or 0), min(as_ or 0, hs or 0)
 
@@ -446,13 +458,40 @@ def build_reel_story(sport: str, game: dict, summary: dict, seconds: int) -> dic
     }]
     for play in moments:
         period = play.get("period") or 1
+        away_sc = play.get("away_score") or 0
+        home_sc = play.get("home_score") or 0
+        prev_away, prev_home = prev_by_id.get(play.get("id"), (away_sc, home_sc))
+        # The acting team is whoever's score went up.
+        kicking_team = aa if (away_sc - prev_away) >= (home_sc - prev_home) and (away_sc > prev_away) else (
+            ha if home_sc > prev_home else aa)
+        fg_distance = parse_fg_distance(play.get("description") or "") if play.get("play_type") == "field_goal" else None
+        play_facts = {
+            "play_type": play.get("play_type"),
+            "description": play.get("description") or "",
+            "period": period,
+            "clock": play.get("clock"),
+            "away_score": away_sc, "home_score": home_sc,
+            "prev_away": prev_away, "prev_home": prev_home,
+            "kicking_team": kicking_team,
+            "fg_distance": fg_distance,
+            "yards_to_goal": (fg_distance - 17) if fg_distance else None,
+        }
+        ctx = PlayContext(
+            sport=sport.upper(), away_abbr=aa, home_abbr=ha,
+            **{k: play_facts[k] for k in (
+                "play_type", "description", "period", "clock", "away_score",
+                "home_score", "prev_away", "prev_home", "kicking_team",
+                "fg_distance", "yards_to_goal")},
+        )
         scenes.append({
             "type": "moment", "duration": 3.3,
             "heading": f"{_period_label_short(sport, period)} {play.get('clock') or ''}".strip(),
             "play_type": play.get("play_type"),
             "text": _clean_play_desc(play.get("description") or ""),
-            "score": {"away": play.get("away_score"), "home": play.get("home_score")},
+            "score": {"away": away_sc, "home": home_sc},
             "narration": _moment_narration(play, aa, ha),
+            "play": play_facts,
+            "analysis": analyze_play(ctx),
         })
     if leaders:
         top = leaders[: 3 if seconds <= 120 else 5]
