@@ -1,6 +1,7 @@
 import { useMemo } from "react";
-import FootballPlayAnimation from "./FootballPlayAnimation";
+import PlayAnimation from "./PlayAnimation";
 import { buildPlaySchema } from "../lib/playSchema";
+import { agentAnnotations } from "../lib/agentAnnotations";
 
 export type PlayFacts = {
   play_type: string;
@@ -34,6 +35,7 @@ export type KeyPlay = {
   analysis: PlayAnalysis;
   awayAbbr: string;
   homeAbbr: string;
+  sport: string;
   heading?: string;
 };
 
@@ -52,15 +54,17 @@ export default function KeyPlayModal({ data, onClose }: { data: KeyPlay; onClose
   const { play, analysis, awayAbbr, homeAbbr } = data;
   const schema = useMemo(
     () => buildPlaySchema({
+      sport: data.sport,
       playType: play.play_type,
       description: play.description,
       fgDistance: play.fg_distance,
       yardsToGoal: play.yards_to_goal,
-      kickingAbbr: play.kicking_team || awayAbbr,
-      defenseAbbr: play.kicking_team === awayAbbr ? homeAbbr : awayAbbr,
+      offAbbr: play.kicking_team || awayAbbr,
+      defAbbr: play.kicking_team === awayAbbr ? homeAbbr : awayAbbr,
     }),
-    [play, awayAbbr, homeAbbr],
+    [play, awayAbbr, homeAbbr, data.sport],
   );
+  const annotations = useMemo(() => agentAnnotations(analysis.agents), [analysis.agents]);
   const wp = analysis.win_prob;
 
   return (
@@ -74,10 +78,11 @@ export default function KeyPlayModal({ data, onClose }: { data: KeyPlay; onClose
           <button className="kp-close" onClick={onClose}>✕</button>
         </header>
 
-        <FootballPlayAnimation
+        <PlayAnimation
           schema={schema}
           awayAbbr={awayAbbr}
           homeAbbr={homeAbbr}
+          annotations={annotations}
           scoreBefore={{ away: play.prev_away, home: play.prev_home }}
           scoreAfter={{ away: play.away_score, home: play.home_score }}
         />

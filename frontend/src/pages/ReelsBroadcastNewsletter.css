@@ -1076,38 +1076,61 @@
 .kp-head strong { font-size: 1.02rem; font-weight: 700; line-height: 1.3; }
 .kp-close { width: 34px; height: 34px; border-radius: 50%; background: var(--surface3); color: var(--text); font-size: 0.9rem; flex-shrink: 0; }
 
-/* ── Field animation ── */
+/* ── Play animation (field + court, with agent pop-ups) ── */
 .pa-wrap { background: linear-gradient(180deg, #0a1f12, #06140b); }
 .pa-scorebar { display: flex; align-items: center; justify-content: space-between; padding: 10px 18px; font-size: 0.95rem; color: #fff; background: rgba(0,0,0,0.35); }
 .pa-scorebar b { font-weight: 800; }
 .pa-scorebar span { opacity: 0.6; font-variant-numeric: tabular-nums; }
 .pa-scorebar span.lead { opacity: 1; }
 .pa-clock { font-size: 0.66rem !important; font-weight: 800; letter-spacing: 0.12em; color: var(--accent-2) !important; opacity: 1 !important; }
+.pa-stage { position: relative; }
 .pa-field { display: block; width: 100%; height: auto; }
-.pa-turf { fill: #15692f; }
-.pa-yard { stroke: rgba(255,255,255,0.28); stroke-width: 0.3; }
+.pa-turf.field { fill: #15692f; }
+.pa-turf.court { fill: #7a4a23; }
+.pa-yard { stroke: rgba(255,255,255,0.26); stroke-width: 0.3; }
 .pa-hash { stroke: rgba(255,255,255,0.5); stroke-width: 0.3; }
 .pa-ez { fill: rgba(37,99,235,0.45); }
 .pa-goal { stroke: rgba(255,255,255,0.85); stroke-width: 0.5; }
 .pa-los { stroke: #fde68a; stroke-width: 0.4; stroke-dasharray: 1.2 1; }
 .pa-uprights line { stroke: #facc15; stroke-width: 0.7; stroke-linecap: round; }
-.pa-uprights.lit line { stroke: #fff; filter: drop-shadow(0 0 2px #facc15); }
+/* court */
+.pa-court-bound { fill: none; stroke: rgba(255,255,255,0.35); stroke-width: 0.4; }
+.pa-court-line { fill: none; stroke: rgba(255,255,255,0.3); stroke-width: 0.4; }
+.pa-paint { fill: rgba(255,255,255,0.06); stroke: rgba(255,255,255,0.3); stroke-width: 0.4; }
+.pa-arc { fill: none; stroke: rgba(255,255,255,0.4); stroke-width: 0.5; }
+.pa-rim { fill: none; stroke: #f97316; stroke-width: 0.8; }
+/* players */
 .pa-marker .pa-body { fill: currentColor; }
 .pa-marker .pa-head { fill: #fff; opacity: 0.92; }
-.pa-marker .pa-label { fill: #fff; font-size: 1.7px; font-weight: 700; text-anchor: middle; paint-order: stroke; stroke: rgba(0,0,0,0.55); stroke-width: 0.4px; }
-.pa-kick { color: #3b82f6; }
+.pa-marker .pa-label { fill: #fff; font-size: 1.7px; font-weight: 700; text-anchor: middle; paint-order: stroke; stroke: rgba(0,0,0,0.6); stroke-width: 0.4px; }
+.pa-off { color: #3b82f6; }
 .pa-def { color: #ef4444; }
-.pa-star .pa-body { stroke: #fde68a; stroke-width: 0.4; }
-.pa-star .pa-label { fill: #fde68a; }
-.pa-ball { fill: #b45309; stroke: #fde68a; stroke-width: 0.25; }
+.pa-ball-carrier { color: #facc15; }
+.pa-ball-carrier .pa-body { stroke: #fff; stroke-width: 0.3; }
+.pa-ball-carrier .pa-label { fill: #fde68a; }
+.pa-ring { fill: none; stroke: #fde68a; stroke-width: 0.35; opacity: 0.7; }
+/* ball */
+.pa-ball.field { fill: #b45309; stroke: #fde68a; stroke-width: 0.25; }
+.pa-ball.court { fill: #f97316; stroke: #b45309; stroke-width: 0.25; }
 .pa-ball-shadow { fill: rgba(0,0,0,0.4); }
+/* agent pop-ups */
+.pa-anns { position: absolute; top: 8px; left: 8px; right: 8px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; pointer-events: none; }
+.pa-ann { display: inline-flex; align-items: baseline; gap: 7px; max-width: 100%; padding: 5px 11px; border-radius: 9px; background: rgba(6,9,16,0.82); border: 1px solid var(--c); backdrop-filter: blur(6px); animation: srPop 0.28s cubic-bezier(0.22,1,0.36,1); }
+.pa-ann b { font-size: 0.72rem; font-weight: 800; color: var(--c); }
+.pa-ann span { font-size: 0.74rem; color: #fff; line-height: 1.25; }
+/* controls + events */
 .pa-controls { display: flex; align-items: center; gap: 12px; padding: 12px 18px; background: rgba(0,0,0,0.3); }
 .pa-timeline { flex: 1; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.18); overflow: hidden; }
 .pa-timeline i { display: block; height: 100%; background: var(--grad); border-radius: 2px; }
 .pa-btn { width: 42px; height: 34px; border-radius: 9px; background: rgba(255,255,255,0.14); color: #fff; font-size: 0.85rem; }
-.pa-event { font-size: 0.78rem; font-weight: 800; letter-spacing: 0.04em; color: #fff; padding: 3px 12px; border-radius: 999px; background: rgba(255,255,255,0.16); animation: srPop 0.3s ease; }
+.pa-event { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); font-size: 0.82rem; font-weight: 800; letter-spacing: 0.04em; color: #fff; padding: 4px 14px; border-radius: 999px; background: rgba(0,0,0,0.6); animation: srPop 0.3s ease; }
 .pa-event.ev-through, .pa-event.ev-score { background: var(--green); color: #04140d; }
 .pa-event.ev-block, .pa-event.ev-miss { background: var(--red); }
+/* compact (embedded in the reel) */
+.pa-compact { width: 100%; max-width: 440px; border-radius: var(--r); overflow: hidden; border: 1px solid rgba(255,255,255,0.14); }
+.pa-compact .pa-ann { padding: 3px 9px; }
+.pa-compact .pa-ann b { font-size: 0.64rem; } .pa-compact .pa-ann span { font-size: 0.66rem; }
+.pa-compact .pa-event { font-size: 0.74rem; bottom: 6px; }
 
 /* ── Analysis ── */
 .kp-analysis { padding: 18px 20px 22px; }

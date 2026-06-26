@@ -1,5 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import KeyPlayModal, { type PlayFacts, type PlayAnalysis, type KeyPlay } from "./KeyPlayModal";
+import PlayAnimation from "./PlayAnimation";
+import { buildPlaySchema } from "../lib/playSchema";
+import { agentAnnotations } from "../lib/agentAnnotations";
 
 export type StoryScene = {
   type: "title" | "moment" | "run" | "break" | "stat" | "verdict";
@@ -76,43 +79,28 @@ function Scoreboard({ scene, awayAbbr, homeAbbr }: { scene: StoryScene; awayAbbr
   );
 }
 
-/* ── Sport-aware play animation ── */
-function PlayViz({ playType, sport }: { playType?: string; sport?: string }) {
-  const isNFL = (sport || "").toUpperCase() === "NFL";
-  const reverse = ["interception", "turnover", "steal", "block", "fumble"].includes(playType || "");
-  if (isNFL) {
-    const d = reverse ? "M 210 60 Q 120 20 26 64" : "M 26 64 Q 130 6 214 58";
-    return (
-      <svg className="sr-field" viewBox="0 0 240 120" aria-hidden="true">
-        <rect x="0" y="0" width="240" height="120" className="fld-grass" />
-        {[40, 80, 120, 160, 200].map((x) => <line key={x} x1={x} y1="6" x2={x} y2="114" className="fld-line" />)}
-        <rect x="0" y="0" width="22" height="120" className="fld-ez" />
-        <rect x="218" y="0" width="22" height="120" className="fld-ez" />
-        <path id="srpath" d={d} className="fld-path" />
-        <g className="fld-ball">
-          <ellipse rx="6" ry="4" />
-          <animateMotion dur="2.2s" repeatCount="indefinite" rotate="auto" keyPoints="0;1" keyTimes="0;1" calcMode="spline" keySplines="0.4 0 0.2 1">
-            <mpath href="#srpath" />
-          </animateMotion>
-        </g>
-      </svg>
-    );
-  }
-  const arc = playType === "three_pointer";
-  const d = reverse ? "M 222 60 Q 120 96 26 38" : arc ? "M 30 96 Q 130 -20 220 56" : "M 28 80 Q 140 78 218 60";
+/* ── Inline animated play for a reel moment scene ── */
+function MomentPlay({ scene, sport, away, home }: { scene: StoryScene; sport?: string; away: string; home: string }) {
+  const schema = useMemo(() => buildPlaySchema({
+    sport: sport || "NFL",
+    playType: scene.play?.play_type || scene.play_type || "",
+    description: scene.play?.description || scene.text || "",
+    fgDistance: scene.play?.fg_distance ?? null,
+    yardsToGoal: scene.play?.yards_to_goal ?? null,
+    offAbbr: scene.play?.kicking_team || away,
+    defAbbr: scene.play?.kicking_team === away ? home : away,
+  }), [scene, sport, away, home]);
+  const annotations = useMemo(() => agentAnnotations(scene.analysis?.agents || []), [scene.analysis]);
   return (
-    <svg className="sr-court" viewBox="0 0 240 120" aria-hidden="true">
-      <rect x="2" y="2" width="236" height="116" rx="10" className="crt-floor" />
-      <path d="M 238 18 A 50 50 0 0 0 238 102" className="crt-line" />
-      <circle cx="222" cy="60" r="5" className="crt-rim" />
-      <path id="srpath" d={d} className="crt-path" />
-      <g className="crt-ball">
-        <circle r="6" />
-        <animateMotion dur="2s" repeatCount="indefinite" calcMode="spline" keyPoints="0;1" keyTimes="0;1" keySplines="0.4 0 0.2 1">
-          <mpath href="#srpath" />
-        </animateMotion>
-      </g>
-    </svg>
+    <PlayAnimation
+      schema={schema}
+      awayAbbr={away}
+      homeAbbr={home}
+      annotations={annotations}
+      compact loop
+      scoreBefore={{ away: scene.play?.prev_away ?? 0, home: scene.play?.prev_home ?? 0 }}
+      scoreAfter={{ away: scene.play?.away_score ?? 0, home: scene.play?.home_score ?? 0 }}
+    />
   );
 }
 
@@ -140,7 +128,7 @@ export default function StoryReelPlayer({
     if (!scene?.play || !scene?.analysis) return;
     window.speechSynthesis?.cancel();
     setPlaying(false);
-    setBreakdown({ play: scene.play, analysis: scene.analysis, awayAbbr: away, homeAbbr: home, heading: scene.heading });
+    setBreakdown({ play: scene.play, analysis: scene.analysis, awayAbbr: away, homeAbbr: home, sport: story.sport || "NFL", heading: scene.heading });
   }
 
   useEffect(() => {
@@ -164,15 +152,18 @@ export default function StoryReelPlayer({
     advancedRef.current = -1;
     const synth = typeof window !== "undefined" ? window.speechSynthesis : null;
     const durMs = Math.max(2600, scene.duration * 1000);
+    // Moment scenes hold for their full duration so the embedded play animation
+    // plays out; other scenes advance as soon as the narration finishes.
+    const isMoment = scene.type === "moment";
     if (synth && !muted && scene.narration) {
       synth.cancel();
       const utter = new SpeechSynthesisUtterance(scene.narration);
       if (voiceRef.current) utter.voice = voiceRef.current;
       utter.rate = 0.98;
-      utter.onend = () => advance();
+      if (!isMoment) utter.onend = () => advance();
       const start = window.setTimeout(() => synth.speak(utter), 120);
-      const safety = window.setTimeout(advance, durMs + 4500); // if onend never fires
-      return () => { window.clearTimeout(start); window.clearTimeout(safety); synth.cancel(); };
+      const timer = window.setTimeout(advance, isMoment ? durMs : durMs + 4500);
+      return () => { window.clearTimeout(start); window.clearTimeout(timer); synth.cancel(); };
     }
     const timer = window.setTimeout(advance, durMs);
     return () => window.clearTimeout(timer);
@@ -225,10 +216,12 @@ export default function StoryReelPlayer({
           <div className="sr-scene" key={index}>
             {scene.heading && <div className="sr-heading">{scene.heading}</div>}
 
-            {scene.type === "moment" && <PlayViz playType={scene.play_type} sport={story.sport} />}
+            {scene.type === "moment" && scene.play && (
+              <MomentPlay scene={scene} sport={story.sport} away={away} home={home} />
+            )}
             {scene.type === "moment" && scene.play && scene.analysis && (
               <button className="sr-breakdown" onClick={(e) => { e.stopPropagation(); openBreakdown(); }}>
-                🔬 Break down this play
+                🔬 Full breakdown & agents
               </button>
             )}
 

@@ -100,12 +100,46 @@ def _ordinal_quarter(period: int) -> str:
     return {1: "1st", 2: "2nd", 3: "3rd", 4: "4th"}.get(period, f"OT{max(0, period - 4)}".rstrip("0") or "OT")
 
 
+def _nba_shot(desc: str) -> dict:
+    d = desc or ""
+    dist = re.search(r"(\d{1,2})-foot", d)
+    assist = re.search(r"\(([A-Za-z.'\- ]+?)\s+assists?\)", d)
+    shooter = re.match(r"\s*([A-Z][A-Za-z.'\-]+(?:\s+[A-Z][A-Za-z.'\-]+)?)", d)
+    return {
+        "made": "makes" in d.lower(),
+        "distance": int(dist.group(1)) if dist else None,
+        "assist": assist.group(1).strip() if assist else None,
+        "shooter": shooter.group(1).strip() if shooter else None,
+    }
+
+
+def _nba_shot_kind(play_type: str, desc: str) -> str:
+    if play_type == "three_pointer":
+        return "three"
+    if play_type == "dunk":
+        return "dunk"
+    if "layup" in (desc or "").lower():
+        return "layup"
+    return "jumper"
+
+
 # ── Agents ──────────────────────────────────────────────────────────────────────
 class ScoutAgent:
     """Reads alignment / field position from the play type and spot."""
     name = "Scout"
 
     def analyze(self, ctx: PlayContext) -> AgentRead:
+        if ctx.sport.upper() == "NBA":
+            if ctx.play_type in ("steal", "block"):
+                verb = "Steal" if ctx.play_type == "steal" else "Block"
+                return AgentRead("Scout", verb, f"{verb} — the defense reads the play and flips possession.", "Read", "defense")
+            info = _nba_shot(ctx.description)
+            kind = _nba_shot_kind(ctx.play_type, ctx.description)
+            feed = f"{info['assist']} sets it up — " if info["assist"] else ""
+            spot = f"from {info['distance']} feet" if info["distance"] else ("at the rim" if kind in ("dunk", "layup") else "off the dribble")
+            return AgentRead("Scout", f"{kind.title()} look",
+                f"{feed}{info['shooter'] or 'The shooter'} gets the {kind} {spot}. The defense was a step late closing out.",
+                "Read", "shot creation")
         if ctx.play_type == "field_goal":
             dist = f"{ctx.fg_distance}-yard try" if ctx.fg_distance else "field-goal try"
             return AgentRead(
@@ -135,6 +169,15 @@ class StatAgent:
     name = "Stat"
 
     def analyze(self, ctx: PlayContext) -> AgentRead:
+        if ctx.sport.upper() == "NBA":
+            if ctx.play_type in ("steal", "block"):
+                return AgentRead("Stat", "Possession swing", "No points on the play, but a stop that turns into offense the other way.", "Impact", "takeaway")
+            info = _nba_shot(ctx.description)
+            pts = abs(ctx.score_delta) or (3 if ctx.play_type == "three_pointer" else 2)
+            dist = f"{info['distance']}-footer · " if info["distance"] else ""
+            return AgentRead("Stat", f"{pts} points",
+                f"{dist}scoreboard now {ctx.away_abbr} {ctx.away_score}, {ctx.home_abbr} {ctx.home_score}.",
+                "Points", str(pts))
         pts = abs(ctx.score_delta) or _POINTS.get(ctx.play_type, 0)
         if ctx.play_type == "field_goal" and ctx.fg_distance:
             p = fg_make_probability(ctx.fg_distance)
@@ -152,6 +195,11 @@ class RefAgent:
     name = "Ref"
 
     def analyze(self, ctx: PlayContext) -> AgentRead:
+        if ctx.sport.upper() == "NBA":
+            d = ctx.description.lower()
+            if "and" in d and ("foul" in d or "free throw" in d):
+                return AgentRead("Ref", "And-one", "Contact on the shot — continuation ruled, basket counts and a free throw is coming.", "Rule", "Continuation")
+            return AgentRead("Ref", "Clean bucket", "No whistle on the play; the basket counts as released.", "Rule", "No foul")
         if ctx.play_type == "field_goal":
             return AgentRead("Ref", "Live ball on the kick",
                 "A field goal is a live ball: if it's short or blocked the defense can advance it, and "

@@ -388,24 +388,32 @@ _MOMENT_VERB = {
 
 
 def _key_moment_plays(plays: list[dict], max_moments: int) -> list[dict]:
-    """Plays where the score changed or a momentum event happened, spread across
-    the game so the reel shows how the final score was built."""
+    """Highlight-worthy plays from across the whole game — every scoring play plus
+    turnovers, sacks, blocks, steals and chunk gains — spread evenly so the reel
+    represents the full game, not just one play type."""
     candidates: list[dict] = []
+    seen: set = set()
     prev: tuple = (None, None)
     for play in plays:
         away, home = play.get("away_score"), play.get("home_score")
         if away is None or home is None:
             continue
+        desc = (play.get("description") or "").lower()
+        pt = play.get("play_type") or ""
         changed = prev != (None, None) and (away, home) != prev
-        notable = play.get("play_type") in _MOMENT_VERB
-        if (changed or notable) and (away, home) != prev:
+        big = re.search(r"\bfor (\d{2,}) yard", desc)
+        big_gain = bool(big) and int(big.group(1)) >= 22 and "kick" not in desc and "punt" not in desc
+        defensive = pt in ("interception", "sack", "block", "steal") or "intercept" in desc
+        scoring = changed and pt != "free_throw"  # skip lone free throws as moments
+        if (scoring or big_gain or defensive) and play.get("id") not in seen:
             candidates.append(play)
+            seen.add(play.get("id"))
         prev = (away, home)
     if len(candidates) <= max_moments:
         return candidates
     step = len(candidates) / max_moments  # even spread across the timeline
     sampled = [candidates[min(int(i * step), len(candidates) - 1)] for i in range(max_moments)]
-    sampled[-1] = candidates[-1]  # always show the decisive final score change
+    sampled[-1] = candidates[-1]  # always show the decisive final moment
     return sampled
 
 
@@ -484,7 +492,7 @@ def build_reel_story(sport: str, game: dict, summary: dict, seconds: int) -> dic
                 "fg_distance", "yards_to_goal")},
         )
         scenes.append({
-            "type": "moment", "duration": 3.3,
+            "type": "moment", "duration": 7.0,
             "heading": f"{_period_label_short(sport, period)} {play.get('clock') or ''}".strip(),
             "play_type": play.get("play_type"),
             "text": _clean_play_desc(play.get("description") or ""),

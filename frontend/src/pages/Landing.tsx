@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
 import { apiPath } from "../lib/api";
+import HeroPlayShowcase from "../components/HeroPlayShowcase";
 import "./Landing.css";
 
 /* ── Waitlist ── */
@@ -26,136 +27,6 @@ function Waitlist() {
       {status === "ok" && <p className="waitlist-msg ok">{message}</p>}
       {status === "error" && <p className="waitlist-msg error">{message}</p>}
     </form>
-  );
-}
-
-/* ── Hero court canvas: four agents tracking a live possession ── */
-type Pt = { x: number; y: number };
-const OFF_ZONES: Pt[] = [
-  { x: 0.26, y: 0.5 }, { x: 0.46, y: 0.24 }, { x: 0.5, y: 0.78 },
-  { x: 0.68, y: 0.46 }, { x: 0.78, y: 0.66 },
-];
-const PHASES = [
-  { agent: "Scout", pbp: "Defensive board — guard ignites the break.", wp: 58 },
-  { agent: "Stat", pbp: "Swing to the wing, defense scrambles to rotate.", wp: 63 },
-  { agent: "Ref", pbp: "Drive draws the help — legal verticality, no foul.", wp: 66 },
-  { agent: "Predict", pbp: "Kick-out to the corner, catch and rise…", wp: 71 },
-  { agent: "Predict", pbp: "Corner three splashes — the lead extends.", wp: 78 },
-];
-
-function useCourtCanvas(canvasRef: React.RefObject<HTMLCanvasElement | null>) {
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext("2d");
-    if (!canvas || !ctx) return;
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-    let W = 0, H = 0;
-    const resize = () => {
-      W = canvas.clientWidth; H = canvas.clientHeight;
-      canvas.width = W * dpr; canvas.height = H * dpr;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    };
-    resize();
-    const ro = new ResizeObserver(resize);
-    ro.observe(canvas);
-    const off = OFF_ZONES.map((z, i) => ({ ...z, sx: 0.6 + i * 0.07, sy: 0.7 + i * 0.09, px: i * 1.2, py: i * 0.8 }));
-    const posAt = (p: typeof off[number], t: number) => ({
-      x: (p.x + 0.06 * Math.sin(t * p.sx + p.px)) * W,
-      y: (p.y + 0.07 * Math.cos(t * p.sy + p.py)) * H,
-    });
-    const trail: Pt[] = [];
-    let holder = 0, prevHolder = 0, passT = 0, t = 0, raf = 0, last = performance.now();
-    const draw = (now: number) => {
-      const dt = Math.min(0.05, (now - last) / 1000);
-      last = now; t += dt;
-      ctx.clearRect(0, 0, W, H);
-      ctx.strokeStyle = "rgba(255,255,255,0.08)"; ctx.lineWidth = 1;
-      ctx.strokeRect(W * 0.04, H * 0.08, W * 0.92, H * 0.84);
-      ctx.beginPath(); ctx.moveTo(W / 2, H * 0.08); ctx.lineTo(W / 2, H * 0.92); ctx.stroke();
-      ctx.beginPath(); ctx.arc(W / 2, H / 2, Math.min(W, H) * 0.12, 0, Math.PI * 2); ctx.stroke();
-      ctx.strokeStyle = "rgba(45,140,255,0.3)";
-      ctx.beginPath(); ctx.arc(W * 0.94, H / 2, 4, 0, Math.PI * 2); ctx.stroke();
-      for (const p of off) {
-        const q = posAt(p, t + 0.7);
-        ctx.fillStyle = "rgba(100,120,140,0.25)";
-        ctx.beginPath(); ctx.arc(q.x + 14, q.y - 10, 5, 0, Math.PI * 2); ctx.fill();
-      }
-      passT += dt;
-      if (passT > 1.8) { passT = 0; prevHolder = holder; holder = (holder + 1 + Math.floor(Math.random() * 2)) % off.length; }
-      const e = Math.min(1, passT / 1.0);
-      const ease = e < 0.5 ? 2 * e * e : 1 - Math.pow(-2 * e + 2, 2) / 2;
-      const a = posAt(off[prevHolder], t), b = posAt(off[holder], t);
-      const ball = { x: a.x + (b.x - a.x) * ease, y: a.y + (b.y - a.y) * ease };
-      for (let i = 0; i < off.length; i++) {
-        const p = posAt(off[i], t);
-        const isH = i === holder;
-        const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, isH ? 20 : 14);
-        g.addColorStop(0, "rgba(220,240,255,0.95)");
-        g.addColorStop(0.35, "rgba(45,140,255,0.85)");
-        g.addColorStop(1, "rgba(45,140,255,0)");
-        ctx.fillStyle = g;
-        ctx.beginPath(); ctx.arc(p.x, p.y, isH ? 20 : 14, 0, Math.PI * 2); ctx.fill();
-      }
-      trail.push({ ...ball }); if (trail.length > 16) trail.shift();
-      for (let i = 0; i < trail.length; i++) {
-        ctx.fillStyle = `rgba(249,115,22,${(i / trail.length) * 0.45})`;
-        ctx.beginPath(); ctx.arc(trail[i].x, trail[i].y, 1.5 + (i / trail.length) * 3.5, 0, Math.PI * 2); ctx.fill();
-      }
-      const bg = ctx.createRadialGradient(ball.x, ball.y, 0, ball.x, ball.y, 10);
-      bg.addColorStop(0, "rgba(255,240,200,1)");
-      bg.addColorStop(1, "rgba(249,115,22,0)");
-      ctx.fillStyle = bg;
-      ctx.beginPath(); ctx.arc(ball.x, ball.y, 10, 0, Math.PI * 2); ctx.fill();
-      const scanX = ((t * 0.1) % 1) * W;
-      const sg = ctx.createLinearGradient(scanX - 30, 0, scanX + 30, 0);
-      sg.addColorStop(0, "rgba(45,140,255,0)");
-      sg.addColorStop(0.5, "rgba(45,140,255,0.07)");
-      sg.addColorStop(1, "rgba(45,140,255,0)");
-      ctx.fillStyle = sg; ctx.fillRect(scanX - 30, 0, 60, H);
-      raf = requestAnimationFrame(draw);
-    };
-    raf = requestAnimationFrame(draw);
-    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
-  }, [canvasRef]);
-}
-
-function CourtPanel() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [phase, setPhase] = useState(0);
-  const [wp, setWp] = useState(54);
-  useCourtCanvas(canvasRef);
-
-  useEffect(() => {
-    const id = window.setInterval(() => setPhase((p) => (p + 1) % PHASES.length), 3200);
-    return () => window.clearInterval(id);
-  }, []);
-  useEffect(() => {
-    const target = PHASES[phase].wp;
-    const id = window.setInterval(() => setWp((v) => Math.abs(target - v) < 1 ? target : v + Math.sign(target - v)), 40);
-    return () => window.clearInterval(id);
-  }, [phase]);
-
-  const frame = PHASES[phase];
-  return (
-    <div className="lp-court-panel">
-      <canvas ref={canvasRef} className="court-canvas" />
-      {["scout", "stat", "ref", "predict"].map((id, i) => {
-        const labels = ["Scout", "Stat", "Ref", "Predict"];
-        const active = labels[i] === frame.agent;
-        const values = ["Spacing · pace +12", "9-2 run · 3PT 41%", "Verticality — legal", `${wp}% win prob`];
-        return (
-          <div key={id} className={`court-hud hud-${id} ${active ? "active" : ""}`}>
-            <span className="hud-tag">{labels[i]}</span>
-            <strong className="hud-value">{values[i]}</strong>
-          </div>
-        );
-      })}
-      <div className="court-ticker">
-        <span className="ticker-live">● LIVE</span>
-        <span className="ticker-text" key={phase}>{frame.pbp}</span>
-        <span className="ticker-clock">Q4 · 4:12</span>
-      </div>
-    </div>
   );
 }
 
@@ -321,7 +192,7 @@ export default function Landing() {
               <span><b>Real</b> ESPN data</span>
             </div>
           </div>
-          <CourtPanel />
+          <HeroPlayShowcase />
         </div>
         <ScoreMarquee />
       </section>

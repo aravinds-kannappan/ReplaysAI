@@ -277,3 +277,16 @@
   .lp [data-reveal] { opacity: 1; transform: none; transition: none; }
   .lp-marquee-track, .vz-wave i, .lp-grad, .vz-dot, .lp-eyebrow-dot { animation: none; }
 }
+
+/* ── Hero play showcase (animated play + agent pop-ups) ── */
+.lp-showcase {
+  position: relative; width: 100%; border-radius: var(--r-xl); overflow: hidden;
+  border: 1px solid var(--border2); background: #06140b;
+  box-shadow: 0 40px 90px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255,255,255,0.02);
+}
+.lp-showcase .pa-wrap.pa-compact { max-width: 100%; border: none; border-radius: 0; }
+.lp-showcase-foot { display: flex; align-items: center; gap: 10px; padding: 11px 16px; background: rgba(0, 0, 0, 0.45); font-size: 0.78rem; color: var(--text-2); }
+.lp-showcase-live { color: var(--live); font-weight: 800; font-size: 0.64rem; letter-spacing: 0.06em; }
+.lp-showcase-dots { margin-left: auto; display: flex; gap: 5px; }
+.lp-showcase-dots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255, 255, 255, 0.25); transition: background var(--med); }
+.lp-showcase-dots i.on { background: var(--accent-2); }
