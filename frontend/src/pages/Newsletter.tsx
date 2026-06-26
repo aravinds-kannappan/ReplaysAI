@@ -38,6 +38,7 @@ export function NewsletterShare() {
 
   return (
     <div className="nl-page nl-shared">
+      <div className="nl-shell">
       <div className="nl-masthead">
         <div className="nl-masthead-logo">ReplaysAI Weekly</div>
         <div className="nl-masthead-meta">{newsletter.week_key} · Shared digest</div>
@@ -49,6 +50,7 @@ export function NewsletterShare() {
       </div>
       <div className="nl-shared-footer">
         <p>Want your own personalized sports newsletter? <Link to="/">Try ReplaysAI →</Link></p>
+      </div>
       </div>
     </div>
   );
@@ -117,6 +119,7 @@ export default function NewsletterPage() {
 
   return (
     <div className="nl-page">
+      <div className="nl-shell">
       <header className="nl-header no-print">
         <button className="nl-back btn-ghost" onClick={() => navigate("/feed")}>← Dashboard</button>
         <div className="nl-header-actions">
@@ -132,7 +135,7 @@ export default function NewsletterPage() {
             <Link to="/demo" className="btn-primary">Pick teams first →</Link>
           ) : (
             <button className="btn-primary" disabled={generating} onClick={() => void generate()}>
-              {generating ? "Writing your newsletter…" : newsletter ? "Regenerate" : "Generate newsletter"}
+              {generating ? "Writing…" : newsletter ? "Regenerate" : "Generate newsletter"}
             </button>
           )}
         </div>
@@ -140,18 +143,16 @@ export default function NewsletterPage() {
 
       {generating && (
         <div className="nl-generating">
-          <div className="nl-generating-dots">
-            <span /><span /><span />
-          </div>
-          <p>Writing your personalized newsletter…</p>
-          <small>This takes about 10 seconds</small>
+          <div className="nl-gen-spinner" />
+          <h3>Writing your newsletter</h3>
+          <p>Pulling results, stats, and hot takes — about 10 seconds.</p>
         </div>
       )}
 
       {!generating && !newsletter && (
         <div className="nl-empty">
-          <div className="nl-empty-icon">📰</div>
-          <h2>Your weekly sports digest</h2>
+          <div className="nl-empty-eyebrow">Weekly digest</div>
+          <h2>Your teams.<br /><span>Your story.</span></h2>
           <p>
             A personalized newsletter covering your teams' results, player stats, upcoming
             games, AI hot takes, and a Dream Team tip — generated fresh every week.
@@ -197,6 +198,7 @@ export default function NewsletterPage() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

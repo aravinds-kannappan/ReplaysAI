@@ -166,6 +166,7 @@ export default function BroadcastPlayer() {
 
   return (
     <div className="bc-page">
+      <div className="bc-shell">
       <header className="bc-header">
         <Link to={gameId ? `/game/${gameId}` : "/reels"} className="bc-back">← Back</Link>
         <div className="bc-header-center">
@@ -265,6 +266,7 @@ export default function BroadcastPlayer() {
       {data?.source === "fallback" && !isLoading && (
         <p className="bc-source-note">Script built from game data (Claude unavailable)</p>
       )}
+      </div>
     </div>
   );
 }

@@ -725,35 +725,52 @@ def _fallback_line(flat: dict[str, float]) -> list[dict]:
     return line
 
 
+def _fetch_athlete_stats_direct(sport: str, athlete_id: int) -> dict[str, float]:
+    """Direct per-athlete stats from ESPN's athlete summary endpoint.
+    Used as a fallback when the byathlete leaderboard scan misses a player."""
+    keys = get_league_keys(sport)
+    try:
+        data = _get_json(
+            f"{ESPN_SITE_BASE}/{keys['sport']}/{keys['league']}/athletes/{athlete_id}/statistics",
+        )
+        splits = (data.get("athlete") or {}).get("splits") or {}
+        cats = splits.get("categories") or []
+        flat: dict[str, float] = {}
+        for cat in cats:
+            for name, value in zip(cat.get("names", []), cat.get("stats", [])):
+                if isinstance(value, (int, float)) and value:
+                    flat[name] = float(value)
+        return flat
+    except Exception:
+        return {}
+
+
 def fetch_espn_athlete_stats(sport: str, ids: list[int]) -> dict[int, dict]:
-    """Season stat lines for specific athletes, compiled from ESPN's by-athlete
-    leaderboard. Returns {athlete_id: {id, name, line: [{label, value}]}}."""
+    """Season stat lines for specific athletes. Returns {athlete_id: {id, name, line: [{label, value}]}}."""
     sport_key = sport.upper()
     want = {int(i) for i in ids}
     if not want:
         return {}
     try:
-        # Followed players can be surfaced from a team's roster (beyond the top
-        # of the leaderboard), so scan deep enough to cover them, not just the
-        # league leaders.
         athletes, names_by_cat = _fetch_byathlete_pages(sport_key, max_pages=40)
     except Exception:
-        return {}
+        athletes, names_by_cat = [], {}
 
     spec = _NBA_STAT_LINE if sport_key == "NBA" else None
     out: dict[int, dict] = {}
+    found: set[int] = set()
+
     for item in athletes:
         athlete = item.get("athlete", {})
         aid = athlete.get("id")
         if not aid or int(aid) not in want:
             continue
         flat = _flatten_athlete_stats(item, names_by_cat)
-        # Pick the right stat line for NFL based on position
         if sport_key == "NFL":
             position = str((athlete.get("position") or {}).get("abbreviation") or "").upper()
             if position == "QB":
                 stat_spec = _NFL_STAT_LINE_QB
-            elif position == "RB" or position == "FB":
+            elif position in ("RB", "FB"):
                 stat_spec = _NFL_STAT_LINE_RB
             elif position in ("WR", "TE"):
                 stat_spec = _NFL_STAT_LINE_WR_TE
@@ -772,12 +789,35 @@ def fetch_espn_athlete_stats(sport: str, ids: list[int]) -> dict[int, dict]:
                 line.append({"label": label, "value": round(value, 1) if isinstance(value, float) else value})
         if not line:
             line = _fallback_line(flat)
-        out[int(aid)] = {
-            "id": int(aid),
+        aid_int = int(aid)
+        found.add(aid_int)
+        out[aid_int] = {
+            "id": aid_int,
             "name": athlete.get("displayName"),
             "team": athlete.get("teamShortName") or ((athlete.get("teams") or [{}])[0].get("abbreviation")),
             "line": line[:5],
         }
+
+    # Fallback: directly fetch stats for any player the leaderboard scan missed.
+    missing = want - found
+    for athlete_id in missing:
+        flat = _fetch_athlete_stats_direct(sport_key, athlete_id)
+        if not flat:
+            continue
+        if sport_key == "NBA":
+            stat_spec = _NBA_STAT_LINE
+        else:
+            stat_spec = _NFL_STAT_LINE_GENERIC
+        line = []
+        for name, label in stat_spec:
+            value = flat.get(name)
+            if value:
+                line.append({"label": label, "value": round(value, 1) if isinstance(value, float) else value})
+        if not line:
+            line = _fallback_line(flat)
+        if line:
+            out[athlete_id] = {"id": athlete_id, "name": None, "team": None, "line": line[:5]}
+
     return out
 
 

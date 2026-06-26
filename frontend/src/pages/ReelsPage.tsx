@@ -158,6 +158,7 @@ export default function ReelsPage() {
 
       {playlist && <ReelPlayer playlist={playlist} onClose={() => setPlaylist(null)} />}
 
+      <div className="rp-shell">
       <header className="rp-header">
         <Link to="/feed" className="rp-back">← Dashboard</Link>
         <div className="rp-header-center">
@@ -338,26 +339,32 @@ export default function ReelsPage() {
       {/* ── Empty state before first prompt ── */}
       {!intent && !resolving && (
         <div className="rp-landing">
+          <div className="rp-landing-title">What you can build</div>
           <div className="rp-landing-grid">
             <div className="rp-landing-card">
+              <div className="rp-landing-card-icon">🎬</div>
               <strong>Story mode</strong>
               <p>Scene-by-scene visual narrative with score animations, possession viz, and stat reveals.</p>
             </div>
             <div className="rp-landing-card">
+              <div className="rp-landing-card-icon">▶</div>
               <strong>Video reel</strong>
               <p>Real ESPN highlight clips assembled by the AI director, narrated by TTS voiceover.</p>
             </div>
             <div className="rp-landing-card">
+              <div className="rp-landing-card-icon">🎙</div>
               <strong>Broadcast mode</strong>
               <p>Two-host AI podcast conversation about the game — like NotebookLM for sports.</p>
             </div>
             <div className="rp-landing-card">
+              <div className="rp-landing-card-icon">💬</div>
               <strong>Interrupt &amp; ask</strong>
               <p>Pause any reel and ask the analyst about a play, a rule, or a player's season.</p>
             </div>
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

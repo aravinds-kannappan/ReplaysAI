@@ -42,38 +42,66 @@ def _build_broadcast_llm(facts: dict, seconds: int) -> list[dict] | None:
     lc = facts.get("lead_changes", 0)
     aa, ha = a.get("abbreviation", "?"), h.get("abbreviation", "?")
     as_, hs = facts.get("away_score"), facts.get("home_score")
+    key_plays = facts.get("key_plays") or []
 
     leader_lines = "\n".join(
         f"{r['team']} — {r['player']}: {r['stat_line']} ({r['category']})"
-        for r in leaders[:6]
+        for r in leaders[:8]
     )
-    period_line = "; ".join(
-        f"{p['label']} {aa} {p['away']}-{p['home']} {ha}" for p in periods
+    period_line = " | ".join(
+        f"{p['label']}: {aa} {p['away']} – {ha} {p['home']}" for p in periods
     )
+    play_lines = "\n".join(
+        f"  Q{p.get('period')} {p.get('clock','')}: {p.get('description','')}"
+        for p in key_plays[:20]
+    )
+
     n_turns = TIER_TURNS.get(seconds, 30)
-    max_tokens = 800 if seconds <= 120 else 2000 if seconds <= 300 else 3800
+    max_tokens = 900 if seconds <= 120 else 2200 if seconds <= 300 else 4000
+
+    winner = h.get("name") if (hs or 0) >= (as_ or 0) else a.get("name")
+    margin = abs((hs or 0) - (as_ or 0))
+    game_narrative = (
+        "close game" if margin <= 5 else
+        "comfortable win" if margin >= 15 else
+        "competitive game"
+    )
 
     system = (
         "You are writing a two-host sports podcast broadcast script. "
-        "HOST_PLAY is the energetic play-by-play voice (factual, exciting). "
-        "HOST_ANALYST is the tactical analyst (deeper, calmer, insightful). "
-        "They have a natural conversation about this game. "
-        "Ground EVERY line in the real data provided — never invent stats, plays, injuries, or quotes.\n\n"
-        f"Write exactly {n_turns} turns total. Each turn maps to a visual scene type.\n\n"
-        "SCENE TYPES: title (game intro), moment (key play), stat (statistics), run (scoring run/momentum), verdict (conclusion).\n\n"
-        "Respond ONLY with a JSON array:\n"
+        "These two hosts have been deeply briefed on this specific game — every turn must reference "
+        "actual plays, actual player names, actual stats, and actual periods from the data provided.\n\n"
+        "HOST_PLAY (host='play'): The energetic play-by-play voice. Narrates what happened in real time — "
+        "calls out specific plays, scoring sequences, clutch moments by player name. Excited, fast-paced.\n\n"
+        "HOST_ANALYST (host='analyst'): The tactical expert. Explains *why* things happened — "
+        "matchup exploits, defensive breakdowns, coaching decisions, efficiency numbers. Calm, incisive, specific.\n\n"
+        "Rules:\n"
+        "- Ground EVERY line in the actual data — never invent stats, plays, injuries, or quotes.\n"
+        "- Reference players by full name on first mention, last name after.\n"
+        "- The analyst must always go deeper than the play-by-play — explain causality, not just events.\n"
+        "- Alternate hosts naturally; avoid two consecutive same-host turns unless dramatically necessary.\n"
+        f"- Write exactly {n_turns} turns total.\n\n"
+        "SCENE TYPES:\n"
+        "  title   — game overview / setup\n"
+        "  moment  — specific key play or clutch sequence\n"
+        "  stat    — statistical deep-dive or efficiency insight\n"
+        "  run     — scoring run, momentum shift, or quarter recap\n"
+        "  verdict — game conclusion, impact, what it means\n\n"
+        "Respond ONLY with a valid JSON array (no markdown fences):\n"
         '[{"host":"play","text":"...","scene_type":"title","duration_hint":8}, ...]\n\n'
-        "host: 'play' or 'analyst'\n"
-        "text: one to three sentences max — punchy broadcaster language\n"
-        "scene_type: one of title/moment/stat/run/verdict\n"
-        "duration_hint: estimated seconds to speak this line (5-15)"
+        "duration_hint: estimated seconds to speak this line (5-18)"
     )
     prompt = (
-        f"Game: {a.get('name')} {as_} at {h.get('name')} {hs} ({facts.get('date','')}).\n"
-        f"Period scores: {period_line or 'n/a'}\n"
-        f"Lead changes: {lc}\n"
+        f"Game: {a.get('name')} {as_} at {h.get('name')} {hs} ({facts.get('date','')})\n"
+        f"Sport: {facts.get('sport','')}\n"
+        f"Result: {winner} wins — {game_narrative}, margin of {margin}\n"
+        f"Lead changes: {lc}\n\n"
+        f"Quarter-by-quarter scoring:\n{period_line or 'n/a'}\n\n"
         f"Statistical leaders:\n{leader_lines or 'n/a'}\n\n"
-        f"Write a {seconds // 60}-minute broadcast conversation ({n_turns} turns)."
+        f"Key plays:\n{play_lines or 'not available'}\n\n"
+        f"Task: Write a {seconds // 60}-minute broadcast conversation ({n_turns} turns) "
+        f"that a die-hard fan would learn something new from. "
+        f"The analyst must explain WHY {winner} won with specific tactical observations from the data above."
     )
 
     try:
@@ -164,6 +192,14 @@ async def generate_broadcast(game_id: int, seconds: int = 300):
     _, summary = resolved_summary
 
     plays = extract_summary_plays(summary, sport, limit=400)
+    all_plays = [p for p in plays if p.get("play_type") != "other"]
+    key_plays = [
+        p for p in all_plays
+        if any(kw in (p.get("description") or "").lower()
+               for kw in ("three", "dunk", "layup", "touchdown", "interception", "sack",
+                          "field goal", "three-pointer", "free throw", "buzzer", "overtime"))
+    ][-25:]
+
     facts = {
         "sport": sport,
         "away": game["away_team"],
@@ -174,6 +210,7 @@ async def generate_broadcast(game_id: int, seconds: int = 300):
         "periods": _period_scores(plays, sport),
         "lead_changes": _lead_changes(plays),
         "leaders": extract_summary_leaders(summary),
+        "key_plays": key_plays,
     }
 
     with ThreadPoolExecutor(max_workers=1) as ex:
