@@ -35,16 +35,25 @@ function useTwoVoices() {
   useEffect(() => {
     function pick() {
       const all = window.speechSynthesis?.getVoices() ?? [];
-      const en = all.filter((v) => v.lang.startsWith("en"));
+      const en = all.filter((v) => v.lang.toLowerCase().startsWith("en"));
       if (en.length === 0) return;
-      // Prefer a pair with different names/genders; fall back to first two available
-      const male = en.find((v) => /male|man|guy|david|james|alex/i.test(v.name)) ?? en[0];
-      const female = en.find((v) => /female|woman|girl|samantha|karen|victoria|zira/i.test(v.name) && v !== male) ?? en[1] ?? en[0];
-      setVoices([male, female]);
+      // Rank by how natural the voice tends to sound, then choose two distinct
+      // voices so the two hosts are clearly different people.
+      const quality = (v: SpeechSynthesisVoice) =>
+        (/google|natural|neural|enhanced|premium|aria|jenny|siri/i.test(v.name) ? 3 : 0) +
+        (v.localService === false ? 1 : 0);
+      const ranked = [...en].sort((a, b) => quality(b) - quality(a));
+      const play =
+        ranked.find((v) => /guy|david|daniel|alex|male|google us/i.test(v.name)) ?? ranked[0];
+      const analyst =
+        ranked.find((v) => v !== play && /aria|jenny|samantha|karen|victoria|zira|female|google uk/i.test(v.name)) ??
+        ranked.find((v) => v !== play) ?? ranked[0];
+      setVoices([play, analyst]);
     }
     if (typeof window === "undefined" || !window.speechSynthesis) return;
     pick();
-    window.speechSynthesis.onvoiceschanged = pick;
+    window.speechSynthesis.addEventListener?.("voiceschanged", pick);
+    return () => window.speechSynthesis.removeEventListener?.("voiceschanged", pick);
   }, []);
 
   return voices;
