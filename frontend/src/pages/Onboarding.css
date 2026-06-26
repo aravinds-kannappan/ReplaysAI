@@ -1,0 +1,350 @@
+/* ──────────────────────────────────────────────────────────────────────────
+   Onboarding wizard ("Try the demo").
+   Shares the global design tokens (index.css) so the demo feels native to the
+   landing page and the dashboard. Restores the styles dropped in the CSS
+   refactor — Onboarding.tsx still uses every class below.
+   ────────────────────────────────────────────────────────────────────────── */
+
+.wizard {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 96px 24px 96px;
+  position: relative;
+}
+.wizard::before {
+  content: "";
+  position: absolute;
+  top: -10%;
+  left: 50%;
+  width: 720px;
+  height: 720px;
+  transform: translateX(-50%);
+  background: radial-gradient(circle, var(--accent-glow) 0%, transparent 62%);
+  pointer-events: none;
+  z-index: -1;
+  filter: blur(8px);
+}
+
+/* ── Progress rail ── */
+.wz-progress {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 44px;
+}
+.wz-progress-step {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--text-muted);
+}
+.wz-progress-step:not(:last-child)::after {
+  content: "";
+  width: 40px;
+  height: 1.5px;
+  background: var(--border2);
+  margin-left: 6px;
+  border-radius: 2px;
+  transition: background var(--med);
+}
+.wz-progress-step.done:not(:last-child)::after { background: var(--accent); }
+.wz-num {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+  transition: all var(--med);
+}
+.wz-progress-step.on .wz-num {
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-dim);
+}
+.wz-progress-step.done .wz-num {
+  background: var(--grad);
+  border-color: transparent;
+  color: #fff;
+}
+.wz-progress-step.on .wz-label,
+.wz-progress-step.done .wz-label { color: var(--text); }
+.wz-label { font-size: 0.85rem; font-weight: 600; }
+
+/* ── Panel ── */
+.wz-panel {
+  text-align: center;
+  animation: fadeUp 0.45s ease;
+}
+.wz-kicker {
+  color: var(--accent-2);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 12px;
+}
+.wz-panel h1 {
+  font-size: clamp(1.9rem, 4vw, 2.6rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.08;
+  margin-bottom: 12px;
+}
+.wz-sub {
+  color: var(--text-2);
+  max-width: 56ch;
+  margin: 0 auto 36px;
+  line-height: 1.6;
+  font-size: 1rem;
+}
+
+/* ── League cards ── */
+.wz-league-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+  max-width: 680px;
+  margin: 0 auto;
+}
+.wz-league-card {
+  padding: 36px 18px;
+  border-radius: var(--r-lg);
+  border: 1.5px solid var(--border2);
+  background: linear-gradient(180deg, var(--surface2), var(--surface));
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  transition: transform var(--fast), border-color var(--fast), box-shadow var(--fast);
+}
+.wz-league-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-4px);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--accent-dim);
+}
+.wz-league-emoji { font-size: 2.4rem; line-height: 1; }
+.wz-league-card strong { font-size: 1.25rem; font-weight: 800; }
+.wz-league-card span { color: var(--text-2); font-size: 0.85rem; }
+
+/* ── Team picker ── */
+.wz-search {
+  width: 100%;
+  max-width: 440px;
+  padding: 13px 18px;
+  border-radius: var(--r);
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  color: var(--text);
+  font-size: 0.95rem;
+  margin-bottom: 20px;
+  transition: border-color var(--fast), box-shadow var(--fast);
+}
+.wz-search::placeholder { color: var(--text-muted); }
+.wz-search:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-dim);
+}
+.wz-selected-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 22px;
+}
+.wz-selected-chip {
+  background: var(--grad);
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  padding: 7px 15px;
+  font-weight: 700;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: opacity var(--fast);
+}
+.wz-selected-chip:hover { opacity: 0.85; }
+.wz-team-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
+}
+.wz-team-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 16px 8px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--r);
+  cursor: pointer;
+  transition: transform var(--fast), border-color var(--fast), background var(--fast);
+}
+.wz-team-card:hover { border-color: var(--border3); transform: translateY(-2px); }
+.wz-team-card.on {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  box-shadow: 0 0 0 1px var(--accent-dim);
+}
+.wz-team-card img { width: 42px; height: 42px; object-fit: contain; }
+.wz-team-fallback {
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  background: var(--surface3);
+  border-radius: 50%;
+  font-size: 0.78rem;
+}
+.wz-team-card strong { font-size: 0.88rem; }
+.wz-team-card span {
+  font-size: 0.68rem;
+  color: var(--text-2);
+  text-align: center;
+  line-height: 1.25;
+}
+
+/* ── Player picker ── */
+.wz-player-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+  text-align: left;
+}
+.wz-player-card {
+  background: linear-gradient(180deg, var(--surface2), var(--surface));
+  border: 1px solid var(--border2);
+  border-radius: var(--r-lg);
+  padding: 18px;
+}
+.wz-player-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.wz-player-head img { width: 36px; height: 36px; object-fit: contain; }
+.wz-player-head strong { display: block; font-size: 0.98rem; font-weight: 800; }
+.wz-player-head span { font-size: 0.72rem; color: var(--text-2); }
+.wz-chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.wz-player-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--border2);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: border-color var(--fast), background var(--fast);
+}
+.wz-player-chip:hover { border-color: var(--accent); }
+.wz-player-chip.on { background: var(--accent-dim); border-color: var(--accent); }
+.wz-player-chip i { font-style: normal; font-size: 0.66rem; color: var(--text-muted); }
+.wz-player-chip span { font-weight: 800; color: var(--accent-2); }
+
+/* ── Nav row ── */
+.wz-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 40px;
+}
+.btn-hero-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 13px 30px;
+  border-radius: var(--r);
+  border: none;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.95rem;
+  background: var(--grad);
+  color: #fff;
+  box-shadow: 0 10px 30px var(--accent-glow);
+  transition: transform var(--fast), opacity var(--fast), box-shadow var(--fast);
+}
+.btn-hero-primary:hover { transform: translateY(-2px); box-shadow: 0 14px 38px var(--accent-glow); }
+.btn-hero-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+  background: var(--surface3);
+  color: var(--text-muted);
+}
+
+/* ── Building screen ── */
+.wz-building {
+  text-align: center;
+  padding: 72px 20px;
+  animation: fadeUp 0.45s ease;
+  max-width: 520px;
+  margin: 0 auto;
+}
+.wz-building h2 { font-size: clamp(1.6rem, 3.5vw, 2rem); font-weight: 800; margin: 26px 0 10px; letter-spacing: -0.02em; }
+.wz-building > p { color: var(--text-2); margin-bottom: 32px; line-height: 1.6; }
+.wz-building-orb { position: relative; width: 76px; height: 76px; margin: 0 auto; }
+.wz-building-orb span {
+  position: absolute;
+  inset: 0;
+  border: 2px solid transparent;
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+.wz-building-orb span:nth-child(2) { inset: 11px; border-top-color: var(--accent-2); animation-duration: 1.4s; }
+.wz-building-orb span:nth-child(3) { inset: 22px; border-top-color: #67e8f9; animation-duration: 0.8s; }
+.wz-jobs {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 14px;
+  text-align: left;
+}
+.wz-job {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  opacity: 0.5;
+  transition: opacity var(--med), color var(--med);
+}
+.wz-job.active, .wz-job.done { opacity: 1; color: var(--text); }
+.wz-job-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  color: #fff;
+  flex-shrink: 0;
+}
+.wz-job.done .wz-job-dot { background: var(--grad); border-color: transparent; }
+.wz-job.active .wz-job-dot { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-dim); }
+
+/* ── Responsive ── */
+@media (max-width: 640px) {
+  .wizard { padding-top: 80px; }
+  .wz-league-cards { grid-template-columns: 1fr; }
+  .wz-player-grid { grid-template-columns: 1fr; }
+  .wz-nav { flex-direction: column-reverse; }
+  .wz-nav button { width: 100%; }
+}

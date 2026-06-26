@@ -41,7 +41,12 @@ def _candidate_games(favorite_teams: list[str], limit: int = 60) -> list[dict]:
         for g in fetch_espn_games(sport, limit=limit, seasons=3):
             if g.get("id") in seen:
                 continue
-            if g.get("away_score") is None and g.get("home_score") is None and g.get("status") != "live":
+            # Only games that have actually been played make good reels/broadcasts.
+            # Scheduled games report 0-0 (not null) and sort to the top by date, so
+            # excluding them by status keeps "last game" on a real, highlightable game.
+            if g.get("status") == "scheduled":
+                continue
+            if g.get("status") != "live" and g.get("away_score") is None and g.get("home_score") is None:
                 continue
             h_abbr = (g.get("home_team") or {}).get("abbreviation", "").upper()
             a_abbr = (g.get("away_team") or {}).get("abbreviation", "").upper()

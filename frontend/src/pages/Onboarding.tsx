@@ -8,6 +8,7 @@ import {
   setLocalFollowedPlayers,
   type FollowedPlayer,
 } from "../hooks/useUser";
+import "./Onboarding.css";
 
 type Team = {
   id: number;

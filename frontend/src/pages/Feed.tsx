@@ -15,16 +15,35 @@ import { apiPath } from "../lib/api";
 import type { Game } from "../types";
 
 type League = "NBA" | "NFL";
-type Tab = "dashboard" | "season" | "extras";
+type Tab = "dashboard" | "season" | "stats" | "extras";
 
 const TABS: { id: Tab; label: string; path: string }[] = [
   { id: "dashboard", label: "Dashboard", path: "/feed" },
   { id: "season", label: "Season", path: "/season" },
+  { id: "stats", label: "Stats", path: "/stats" },
   { id: "extras", label: "Extras", path: "/extras" },
 ];
 const PATH_TO_TAB: Record<string, Tab> = {
   "/feed": "dashboard", "/dashboard": "dashboard", "/season": "season", "/games": "season",
+  "/stats": "stats",
   "/extras": "extras", "/picks": "extras", "/predictions": "extras", "/roster": "extras", "/leaderboard": "extras",
+};
+
+/* ── Position groups for the all-positions stats browser ── */
+type RosterPlayer = { id: number; name: string; team: string | null; position: string | null; impact_score: number; headshot?: string | null };
+const POSITION_GROUPS: Record<League, { id: string; label: string; test: (pos: string) => boolean }[]> = {
+  NBA: [
+    { id: "G", label: "Guards", test: (p) => /^(PG|SG|G)$/.test(p) },
+    { id: "F", label: "Forwards", test: (p) => /^(SF|PF|F)$/.test(p) },
+    { id: "C", label: "Centers", test: (p) => /^C$/.test(p) },
+  ],
+  NFL: [
+    { id: "QB", label: "Quarterbacks", test: (p) => p === "QB" },
+    { id: "RB", label: "Running backs", test: (p) => /^(RB|FB)$/.test(p) },
+    { id: "WR", label: "Wide receivers", test: (p) => p === "WR" },
+    { id: "TE", label: "Tight ends", test: (p) => p === "TE" },
+    { id: "DEF", label: "Defense", test: (p) => /^(DE|DT|NT|EDGE|LB|MLB|OLB|ILB|CB|S|FS|SS|DB)$/.test(p) },
+  ],
 };
 
 function gameTitle(g?: Game) {
@@ -148,6 +167,68 @@ function StatsBlock({ league, players }: { league: League; players: FollowedPlay
   );
 }
 
+
+/* ── All-positions stats browser (real ESPN season stats) ── */
+function StatsExplorer({ league }: { league: League }) {
+  const { data: pool = [], isLoading } = useRosterPlayers(league) as { data?: RosterPlayer[]; isLoading: boolean };
+  const groups = POSITION_GROUPS[league];
+  const [filter, setFilter] = useState<string>("all");
+  useEffect(() => { setFilter("all"); }, [league]);
+
+  const groupOf = (pos: string | null) => groups.find((g) => g.test((pos || "").toUpperCase()));
+  const perGroupCap = filter === "all" ? 6 : 24;
+  const shownGroups = (filter === "all" ? groups : groups.filter((g) => g.id === filter))
+    .map((g) => ({ group: g, players: pool.filter((p) => groupOf(p.position)?.id === g.id).slice(0, perGroupCap) }))
+    .filter((x) => x.players.length > 0);
+
+  // Fetch real season lines only for what's on screen (cached, parallel server-side).
+  const visibleIds = useMemo(
+    () => shownGroups.flatMap((x) => x.players.map((p) => p.id)).slice(0, 30),
+    [shownGroups],
+  );
+  const { data: statMap = {} } = usePlayerStats(league, visibleIds);
+
+  return (
+    <section className="dash-panel">
+      <div className="panel-heading">
+        <div><span>{league} · real ESPN season stats, every position</span><h2>Player stats</h2></div>
+        <button className="btn-ghost" onClick={() => askAssistant(`Break down the top ${league} players by position this season.`)}>Ask the analyst</button>
+      </div>
+      <div className="stats-filter">
+        <button className={filter === "all" ? "on" : ""} onClick={() => setFilter("all")}>All positions</button>
+        {groups.map((g) => (
+          <button key={g.id} className={filter === g.id ? "on" : ""} onClick={() => setFilter(g.id)}>{g.label}</button>
+        ))}
+      </div>
+      {isLoading && pool.length === 0 && <p className="loading-text">Loading {league} players…</p>}
+      {!isLoading && pool.length === 0 && <p className="empty-state">No {league} players available right now.</p>}
+      {shownGroups.map(({ group, players }) => (
+        <div key={group.id} className="stat-pos-group">
+          <h3 className="stat-pos-title">{group.label}<span>{players.length}</span></h3>
+          <div className="stat-grid">
+            {players.map((p) => {
+              const line = statMap[String(p.id)]?.line ?? [];
+              return (
+                <Link key={p.id} to={`/player/${p.id}`} className="stat-player-card">
+                  <div className="spc-head">
+                    {p.headshot ? <img src={p.headshot} alt="" loading="lazy" /> : <span className="spc-ph">{p.position || "—"}</span>}
+                    <div className="spc-id"><strong>{p.name}</strong><span>{p.team || "FA"} · {p.position || "—"}</span></div>
+                    <b className="spc-impact" title="Impact score">{p.impact_score}</b>
+                  </div>
+                  {line.length > 0 ? (
+                    <div className="spc-line">{line.slice(0, 5).map((s) => <span key={s.label}><b>{s.value}</b>{s.label}</span>)}</div>
+                  ) : (
+                    <div className="spc-line muted">Season line loading…</div>
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </section>
+  );
+}
 
 function PredictionLab({
   league,
@@ -627,6 +708,13 @@ export default function Feed() {
               {!isLoading && games.length === 0 && <p className="empty-state">No {league} games yet. <Link to="/demo">Pick teams →</Link></p>}
               <div className="games-grid">{games.map((g) => <ScoreCard key={g.id} game={g} />)}</div>
             </section>
+          </>
+        )}
+
+        {activeTab === "stats" && (
+          <>
+            <StatsExplorer league={league} />
+            <StatsBlock league={league} players={followedPlayers} />
           </>
         )}
 

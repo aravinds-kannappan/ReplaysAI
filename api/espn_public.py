@@ -12,6 +12,7 @@ import httpx
 
 ESPN_SITE_BASE = "https://site.api.espn.com/apis/site/v2/sports"
 ESPN_WEB_BASE = "https://site.web.api.espn.com/apis/common/v3/sports"
+ESPN_CORE_BASE = "https://sports.core.api.espn.com/v2/sports"
 
 LEAGUE_KEYS = {
     "NBA": {"sport": "basketball", "league": "nba"},
@@ -725,24 +726,72 @@ def _fallback_line(flat: dict[str, float]) -> list[dict]:
     return line
 
 
+def _nfl_line_from_flat(flat: dict[str, float]) -> list[dict]:
+    """Position-appropriate NFL stat line inferred from the stats themselves.
+
+    Used for athletes resolved via the per-athlete endpoint, where the position
+    label isn't on hand. Picking a spec from the dominant production avoids
+    noise like a "1 tackle" stat showing up on a running back's line.
+    """
+    passing = flat.get("passingYards") or 0
+    rushing = flat.get("rushingYards") or 0
+    receiving = flat.get("receivingYards") or 0
+    defense = (flat.get("totalTackles") or 0) + (flat.get("sacks") or 0)
+    if passing >= 200:
+        spec = _NFL_STAT_LINE_QB
+    elif receiving and receiving >= rushing:
+        spec = _NFL_STAT_LINE_WR_TE
+    elif rushing:
+        spec = _NFL_STAT_LINE_RB
+    elif defense:
+        spec = _NFL_STAT_LINE_DL_LB
+    else:
+        spec = _NFL_STAT_LINE_GENERIC
+    line = []
+    for name, label in spec:
+        value = flat.get(name)
+        if value:
+            line.append({"label": label, "value": round(value, 1) if isinstance(value, float) else value})
+    return line or _fallback_line(flat)
+
+
+def _current_season_year(sport: str) -> int:
+    """Season year ESPN tags the current season with (NFL by start year, NBA by
+    end year)."""
+    today = date_cls.today()
+    if sport.upper() == "NFL":
+        return today.year if today.month >= 8 else today.year - 1
+    return today.year + 1 if today.month >= 9 else today.year
+
+
 def _fetch_athlete_stats_direct(sport: str, athlete_id: int) -> dict[str, float]:
-    """Direct per-athlete stats from ESPN's athlete summary endpoint.
-    Used as a fallback when the byathlete leaderboard scan misses a player."""
+    """Direct per-athlete season stats from ESPN's core API.
+
+    The older site-API summary endpoint 404s for most non-QB athletes, which is
+    why league-wide NFL stats used to come back empty for every position except
+    quarterback. The core API resolves cleanly across all positions.
+    """
     keys = get_league_keys(sport)
-    try:
-        data = _get_json(
-            f"{ESPN_SITE_BASE}/{keys['sport']}/{keys['league']}/athletes/{athlete_id}/statistics",
-        )
-        splits = (data.get("athlete") or {}).get("splits") or {}
-        cats = splits.get("categories") or []
+    year = _current_season_year(sport)
+    for season in (year, year - 1):  # tolerate the season boundary
+        try:
+            data = _get_json(
+                f"{ESPN_CORE_BASE}/{keys['sport']}/leagues/{keys['league']}"
+                f"/seasons/{season}/types/2/athletes/{athlete_id}/statistics",
+            )
+        except Exception:
+            continue
+        cats = (data.get("splits") or {}).get("categories") or []
         flat: dict[str, float] = {}
         for cat in cats:
-            for name, value in zip(cat.get("names", []), cat.get("stats", [])):
-                if isinstance(value, (int, float)) and value:
+            for stat in cat.get("stats", []):
+                name = stat.get("name")
+                value = stat.get("value")
+                if name and isinstance(value, (int, float)) and value:
                     flat[name] = float(value)
-        return flat
-    except Exception:
-        return {}
+        if flat:
+            return flat
+    return {}
 
 
 def fetch_espn_athlete_stats(sport: str, ids: list[int]) -> dict[int, dict]:
@@ -799,24 +848,28 @@ def fetch_espn_athlete_stats(sport: str, ids: list[int]) -> dict[int, dict]:
         }
 
     # Fallback: directly fetch stats for any player the leaderboard scan missed.
-    missing = want - found
-    for athlete_id in missing:
-        flat = _fetch_athlete_stats_direct(sport_key, athlete_id)
-        if not flat:
-            continue
-        if sport_key == "NBA":
-            stat_spec = _NBA_STAT_LINE
-        else:
-            stat_spec = _NFL_STAT_LINE_GENERIC
-        line = []
-        for name, label in stat_spec:
-            value = flat.get(name)
-            if value:
-                line.append({"label": label, "value": round(value, 1) if isinstance(value, float) else value})
-        if not line:
-            line = _fallback_line(flat)
-        if line:
-            out[athlete_id] = {"id": athlete_id, "name": None, "team": None, "line": line[:5]}
+    # For NFL that is every non-QB (the leaderboard is passing-only), so these
+    # are fetched in parallel — a serial loop would make an all-positions stats
+    # view crawl.
+    missing = list(want - found)
+    if missing:
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            results = pool.map(lambda aid: (aid, _fetch_athlete_stats_direct(sport_key, aid)), missing)
+        for athlete_id, flat in results:
+            if not flat:
+                continue
+            if sport_key == "NBA":
+                line = []
+                for name, label in _NBA_STAT_LINE:
+                    value = flat.get(name)
+                    if value:
+                        line.append({"label": label, "value": round(value, 1) if isinstance(value, float) else value})
+                if not line:
+                    line = _fallback_line(flat)
+            else:
+                line = _nfl_line_from_flat(flat)
+            if line:
+                out[athlete_id] = {"id": athlete_id, "name": None, "team": None, "line": line[:5]}
 
     return out
 
@@ -1008,9 +1061,87 @@ def fetch_espn_news(sport: str | None = None, limit: int = 12) -> list[dict]:
     return articles[:limit if sport else limit * 2]
 
 
+# ESPN's by-athlete leaderboard is single-category. The default (and the
+# "offense" category) is the passing leaderboard, so *every* NFL result is a QB.
+# Pulling and merging these categories surfaces every position group:
+#   offense → QB · scoring → RB/WR/TE · defense → DE/DT/LB/CB/S
+_NFL_LEADERBOARD_CATEGORIES = ("offense", "scoring", "defense")
+_NFL_POSITION_WEIGHT = {
+    "QB": 34.0, "RB": 26.0, "WR": 24.0, "TE": 18.0,
+    "DE": 16.0, "EDGE": 16.0, "DT": 14.0, "NT": 13.0,
+    "LB": 15.0, "MLB": 15.0, "OLB": 15.0, "ILB": 15.0,
+    "CB": 13.0, "S": 12.0, "FS": 12.0, "SS": 12.0, "DB": 12.0,
+    "K": 6.0, "P": 4.0,
+}
+
+
+def _athlete_leaderboard_value(item: dict) -> float:
+    """Headline numeric value for an athlete on a by-athlete leaderboard."""
+    values = [
+        v
+        for category in item.get("categories", [])
+        for v in category.get("values", [])
+        if isinstance(v, (int, float))
+    ]
+    if not values:
+        return 0.0
+    return sum(values[:6]) / max(1, min(len(values), 6))
+
+
+def _athlete_card(item: dict, sport_key: str, impact: float) -> dict | None:
+    athlete = item.get("athlete", {})
+    raw_id = athlete.get("id")
+    if not raw_id:
+        return None
+    return {
+        "id": int(raw_id),
+        "name": athlete.get("displayName"),
+        "position": (athlete.get("position") or {}).get("abbreviation"),
+        "team": athlete.get("teamShortName") or ((athlete.get("teams") or [{}])[0].get("abbreviation")),
+        "sport": sport_key,
+        "impact_score": round(impact, 1),
+        "headshot": (athlete.get("headshot") or {}).get("href"),
+    }
+
+
+def _fetch_nfl_athletes_all_positions(limit: int) -> list[dict]:
+    """Position-diverse NFL athlete pool merged from several stat leaderboards."""
+    keys = get_league_keys("NFL")
+    base_url = f"{ESPN_WEB_BASE}/{keys['sport']}/{keys['league']}/statistics/byathlete"
+    athletes: list[dict] = []
+    seen: set[int] = set()
+    for category in _NFL_LEADERBOARD_CATEGORIES:
+        try:
+            data = _get_json(base_url, {"limit": 50, "category": category})
+        except Exception:
+            continue
+        items = data.get("athletes", [])
+        # Normalise each leaderboard to 0..100 so positions ranked by different
+        # stats (tackles vs touchdowns vs passing yards) compare fairly; a
+        # position weight then keeps the cross-position ordering fan-sensible.
+        raw = [_athlete_leaderboard_value(it) for it in items]
+        top = max(raw) if raw else 0.0
+        for item, value in zip(items, raw):
+            card = _athlete_card(item, "NFL", 0.0)
+            if not card or card["id"] in seen:
+                continue
+            seen.add(card["id"])
+            norm = (value / top * 100.0) if top else 0.0
+            weight = _NFL_POSITION_WEIGHT.get(str(card["position"] or "").upper(), 8.0)
+            card["impact_score"] = round(norm + weight, 1)
+            athletes.append(card)
+    athletes.sort(key=lambda p: p.get("impact_score") or 0, reverse=True)
+    return athletes[:limit] if limit else athletes
+
+
 def fetch_espn_athletes(sport: str, limit: int = 80) -> list[dict]:
-    keys = get_league_keys(sport)
     sport_key = sport.upper()
+    if sport_key == "NFL":
+        nfl = _fetch_nfl_athletes_all_positions(limit)
+        if nfl:
+            return nfl
+        # Fall through to the single-leaderboard path if the category fetch fails.
+    keys = get_league_keys(sport)
     try:
         data = _get_json(
             f"{ESPN_WEB_BASE}/{keys['sport']}/{keys['league']}/statistics/byathlete",
@@ -1019,24 +1150,10 @@ def fetch_espn_athletes(sport: str, limit: int = 80) -> list[dict]:
     except Exception:
         return []
     athletes = []
-
     for index, item in enumerate(data.get("athletes", [])):
-        athlete = item.get("athlete", {})
-        if not athlete.get("id"):
-            continue
-        categories = item.get("categories", [])
-        values = []
-        for category in categories:
-            values.extend(v for v in category.get("values", []) if isinstance(v, (int, float)))
-        impact = round(sum(values[:6]) / max(1, min(len(values), 6)), 1) if values else round(80 - index * 0.5, 1)
-
-        athletes.append({
-            "id": int(athlete.get("id")),
-            "name": athlete.get("displayName"),
-            "position": (athlete.get("position") or {}).get("abbreviation"),
-            "team": athlete.get("teamShortName") or ((athlete.get("teams") or [{}])[0].get("abbreviation")),
-            "sport": sport_key,
-            "impact_score": impact,
-            "headshot": (athlete.get("headshot") or {}).get("href"),
-        })
+        value = _athlete_leaderboard_value(item)
+        impact = round(value, 1) if value else round(80 - index * 0.5, 1)
+        card = _athlete_card(item, sport_key, impact)
+        if card:
+            athletes.append(card)
     return athletes

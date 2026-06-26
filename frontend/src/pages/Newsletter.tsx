@@ -92,14 +92,24 @@ export default function NewsletterPage() {
         week_key: weekKey,
       });
       const payload = res.data as { week_key: string; content_md: string; teams_snapshot: unknown };
-      // Save to Supabase
+      // Render the freshly generated digest immediately. Persistence (Supabase
+      // for shareable links, otherwise localStorage) is best-effort and never
+      // blocks the digest from showing.
       const saved = await saveNewsletter({
         user_id: userId,
         week_key: payload.week_key,
         content_md: payload.content_md,
         teams_snapshot: payload.teams_snapshot,
       });
-      setNewsletter(saved);
+      setNewsletter(saved ?? {
+        id: `${userId}:${payload.week_key}`,
+        user_id: userId,
+        week_key: payload.week_key,
+        content_md: payload.content_md,
+        teams_snapshot: payload.teams_snapshot,
+        share_token: "",
+        created_at: new Date().toISOString(),
+      });
     } finally {
       setGenerating(false);
     }
@@ -125,9 +135,11 @@ export default function NewsletterPage() {
         <div className="nl-header-actions">
           {newsletter && (
             <>
-              <button className="btn-ghost" onClick={copyShareLink}>
-                {copied ? "Copied!" : "Share link"}
-              </button>
+              {newsletter.share_token && (
+                <button className="btn-ghost" onClick={copyShareLink}>
+                  {copied ? "Copied!" : "Share link"}
+                </button>
+              )}
               <button className="btn-ghost" onClick={printNewsletter}>Download PDF</button>
             </>
           )}

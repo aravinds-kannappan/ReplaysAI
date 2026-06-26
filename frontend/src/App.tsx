@@ -34,6 +34,7 @@ export default function App() {
           <Route path="/dashboard" element={<Feed />} />
           <Route path="/season" element={<Feed />} />
           <Route path="/games" element={<Feed />} />
+          <Route path="/stats" element={<Feed />} />
           <Route path="/extras" element={<Feed />} />
           <Route path="/picks" element={<Feed />} />
           <Route path="/predictions" element={<Feed />} />
