@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueries } from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
 import axios from "axios";
 import {
@@ -8,7 +8,7 @@ import {
   useCreatePrediction, usePredictions, useSaveRoster, useRosters, usePlayerStats,
   useRankings, type Standing,
 } from "../hooks/usePredictions";
-import { useCurrentUser, type FollowedPlayer } from "../hooks/useUser";
+import { useCurrentUser, type FollowedPlayer, type FavoriteTeam } from "../hooks/useUser";
 import { useGames } from "../hooks/useGames";
 import ScoreCard from "../components/ScoreCard";
 import { apiPath } from "../lib/api";
@@ -29,8 +29,7 @@ const PATH_TO_TAB: Record<string, Tab> = {
   "/extras": "extras", "/picks": "extras", "/predictions": "extras", "/roster": "extras", "/leaderboard": "extras",
 };
 
-/* ── Position groups for the all-positions stats browser ── */
-type RosterPlayer = { id: number; name: string; team: string | null; position: string | null; impact_score: number; headshot?: string | null };
+/* ── Position groups for the stats browser ── */
 const POSITION_GROUPS: Record<League, { id: string; label: string; test: (pos: string) => boolean }[]> = {
   NBA: [
     { id: "G", label: "Guards", test: (p) => /^(PG|SG|G)$/.test(p) },
@@ -168,31 +167,54 @@ function StatsBlock({ league, players }: { league: League; players: FollowedPlay
 }
 
 
-/* ── All-positions stats browser (real ESPN season stats) ── */
-function StatsExplorer({ league }: { league: League }) {
-  const { data: pool = [], isLoading } = useRosterPlayers(league) as { data?: RosterPlayer[]; isLoading: boolean };
+/* ── Rosters for the fan's own teams (deduped, cached) ── */
+type TeamRosterPlayer = { id: number; name: string; position: string | null; team?: string | null; jersey?: string | null; headshot?: string | null };
+function useFavoriteTeamRosters(league: League, teams: FavoriteTeam[]) {
+  const leagueTeams = useMemo(() => teams.filter((t) => t.sport === league), [teams, league]);
+  const results = useQueries({
+    queries: leagueTeams.map((t) => ({
+      queryKey: ["team-roster", t.id, t.sport],
+      queryFn: () => axios.get(apiPath(`/api/teams/${t.id}/players`), { params: { sport: t.sport } }).then((r) => r.data as TeamRosterPlayer[]),
+      staleTime: 600_000,
+    })),
+  });
+  const pool = results.flatMap((r, i) => (r.data ?? []).map((p) => ({ ...p, team: p.team || leagueTeams[i]?.abbreviation || null })));
+  return { pool, isLoading: results.some((r) => r.isLoading), teamCount: leagueTeams.length };
+}
+
+/* ── Stats browser scoped to the fan's teams (real ESPN season stats) ── */
+function StatsExplorer({ league, teams, followed }: { league: League; teams: FavoriteTeam[]; followed: FollowedPlayer[] }) {
+  const { pool, isLoading, teamCount } = useFavoriteTeamRosters(league, teams);
+  const followedIds = useMemo(() => new Set(followed.map((p) => p.id)), [followed]);
   const groups = POSITION_GROUPS[league];
   const [filter, setFilter] = useState<string>("all");
   useEffect(() => { setFilter("all"); }, [league]);
 
   const groupOf = (pos: string | null) => groups.find((g) => g.test((pos || "").toUpperCase()));
-  const perGroupCap = filter === "all" ? 6 : 24;
+  const perGroupCap = filter === "all" ? 8 : 40;
   const shownGroups = (filter === "all" ? groups : groups.filter((g) => g.id === filter))
     .map((g) => ({ group: g, players: pool.filter((p) => groupOf(p.position)?.id === g.id).slice(0, perGroupCap) }))
     .filter((x) => x.players.length > 0);
 
-  // Fetch real season lines only for what's on screen (cached, parallel server-side).
   const visibleIds = useMemo(
-    () => shownGroups.flatMap((x) => x.players.map((p) => p.id)).slice(0, 30),
+    () => shownGroups.flatMap((x) => x.players.map((p) => p.id)).slice(0, 36),
     [shownGroups],
   );
   const { data: statMap = {} } = usePlayerStats(league, visibleIds);
 
+  if (teamCount === 0) {
+    return (
+      <section className="dash-panel">
+        <div className="panel-heading"><div><span>Your {league} teams</span><h2>Player stats</h2></div></div>
+        <p className="empty-state">No {league} teams followed yet. <Link to="/demo">Pick teams →</Link></p>
+      </section>
+    );
+  }
   return (
     <section className="dash-panel">
       <div className="panel-heading">
-        <div><span>{league} · real ESPN season stats, every position</span><h2>Player stats</h2></div>
-        <button className="btn-ghost" onClick={() => askAssistant(`Break down the top ${league} players by position this season.`)}>Ask the analyst</button>
+        <div><span>Your {league} teams · real ESPN season stats</span><h2>Player stats</h2></div>
+        <button className="btn-ghost" onClick={() => askAssistant(`Break down my ${league} teams' rosters by position this season.`)}>Ask the analyst</button>
       </div>
       <div className="stats-filter">
         <button className={filter === "all" ? "on" : ""} onClick={() => setFilter("all")}>All positions</button>
@@ -200,20 +222,21 @@ function StatsExplorer({ league }: { league: League }) {
           <button key={g.id} className={filter === g.id ? "on" : ""} onClick={() => setFilter(g.id)}>{g.label}</button>
         ))}
       </div>
-      {isLoading && pool.length === 0 && <p className="loading-text">Loading {league} players…</p>}
-      {!isLoading && pool.length === 0 && <p className="empty-state">No {league} players available right now.</p>}
+      {isLoading && pool.length === 0 && <p className="loading-text">Loading your teams' rosters…</p>}
+      {!isLoading && pool.length === 0 && <p className="empty-state">Rosters unavailable right now.</p>}
       {shownGroups.map(({ group, players }) => (
         <div key={group.id} className="stat-pos-group">
           <h3 className="stat-pos-title">{group.label}<span>{players.length}</span></h3>
           <div className="stat-grid">
             {players.map((p) => {
               const line = statMap[String(p.id)]?.line ?? [];
+              const isFollowed = followedIds.has(p.id);
               return (
-                <Link key={p.id} to={`/player/${p.id}`} className="stat-player-card">
+                <Link key={p.id} to={`/player/${p.id}`} className={`stat-player-card ${isFollowed ? "followed" : ""}`}>
                   <div className="spc-head">
                     {p.headshot ? <img src={p.headshot} alt="" loading="lazy" /> : <span className="spc-ph">{p.position || "—"}</span>}
-                    <div className="spc-id"><strong>{p.name}</strong><span>{p.team || "FA"} · {p.position || "—"}</span></div>
-                    <b className="spc-impact" title="Impact score">{p.impact_score}</b>
+                    <div className="spc-id"><strong>{p.name}{isFollowed && <em className="spc-star" title="You follow this player">★</em>}</strong><span>{p.team || "FA"} · {p.position || "—"}</span></div>
+                    {p.jersey && <b className="spc-impact" title="Jersey">#{p.jersey}</b>}
                   </div>
                   {line.length > 0 ? (
                     <div className="spc-line">{line.slice(0, 5).map((s) => <span key={s.label}><b>{s.value}</b>{s.label}</span>)}</div>
@@ -420,16 +443,14 @@ function RosterPanel({ league }: { league: League }) {
   );
 }
 
-/* ── ESPN-style live scores ticker ── */
-function ScoresTicker({ sport }: { sport: League }) {
-  const { data } = useGames({ sport, limit: 18 });
-  const all = (data?.games ?? []) as Game[];
-  const games = all.filter((g) => g.status !== "scheduled").slice(0, 14);
+/* ── Live scores ticker for the fan's own teams ── */
+function ScoresTicker({ sport, games: feedGames }: { sport: League; games: Game[] }) {
+  const games = feedGames.filter((g) => g.status !== "scheduled").slice(0, 14);
   if (games.length === 0) return null;
-  const row = [...games, ...games];
+  const row = games.length >= 6 ? [...games, ...games] : games;
   return (
     <div className="score-ticker">
-      <span className="ticker-flag">{sport} SCORES</span>
+      <span className="ticker-flag">{sport} · YOUR TEAMS</span>
       <div className="ticker-vp"><div className="ticker-row">
         {row.map((g, i) => (
           <Link key={i} to={`/game/${g.id}`} className="tick">
@@ -464,20 +485,21 @@ function StandingsRail({ sport, favs }: { sport: League; favs: Set<string> }) {
   );
 }
 
-/* ── League leaders rail ── */
-function LeadersRail({ sport }: { sport: League }) {
-  const { data: players = [] } = useRosterPlayers(sport) as { data?: { id: number; name: string; team: string | null; position: string | null; impact_score: number }[] };
-  const top = players.slice(0, 8);
+/* ── Your teams' key players rail ── */
+function LeadersRail({ sport, teams }: { sport: League; teams: FavoriteTeam[] }) {
+  const { pool, teamCount } = useFavoriteTeamRosters(sport, teams);
+  const top = pool.slice(0, 8);
+  if (teamCount === 0) return null;
   return (
     <div className="rail-card">
-      <div className="rail-head"><span>{sport} leaders</span></div>
+      <div className="rail-head"><span>{sport} · your players</span></div>
       {top.length === 0 ? <p className="empty-state" style={{ padding: "8px 0", fontSize: "0.8rem" }}>Loading…</p> : (
         <div className="rail-leaders">
           {top.map((p, i) => (
             <Link key={p.id} to={`/player/${p.id}`} className="rl-row">
               <span className="rl-rank">{i + 1}</span>
               <div><strong>{p.name}</strong><span>{p.team || "FA"} · {p.position || "—"}</span></div>
-              <b>{p.impact_score}</b>
+              {p.jersey && <b>#{p.jersey}</b>}
             </Link>
           ))}
         </div>
@@ -603,7 +625,7 @@ export default function Feed() {
   const { data: liveData } = useGames({ sport: league, status: "live", limit: 12 });
 
   const favoriteTeams = useMemo(
-    () => (user?.favorite_teams ?? []) as { abbreviation: string; sport: string; name: string }[],
+    () => (user?.favorite_teams ?? []) as FavoriteTeam[],
     [user?.favorite_teams],
   );
   const followedPlayers = useMemo(
@@ -669,7 +691,7 @@ export default function Feed() {
         {activeTab === "dashboard" && (
           <div className="dash-layout">
             <div className="dash-main-col">
-              <ScoresTicker sport={league} />
+              <ScoresTicker sport={league} games={games} />
               <YourStars league={league} players={followedPlayers} />
               <RecentResults games={games} />
               <UpNext league={league} favTeams={favoriteTeams} />
@@ -687,7 +709,7 @@ export default function Feed() {
             </div>
             <aside className="dash-rail">
               <StandingsRail sport={league} favs={new Set(favoriteTeams.filter((t) => t.sport === league).map((t) => t.abbreviation))} />
-              <LeadersRail sport={league} />
+              <LeadersRail sport={league} teams={favoriteTeams} />
               <div className="rail-card">
                 <div className="rail-head"><span>News</span></div>
                 <NewsBlock league={league} teams={favoriteTeams} players={followedPlayers} embedded />
@@ -713,7 +735,7 @@ export default function Feed() {
 
         {activeTab === "stats" && (
           <>
-            <StatsExplorer league={league} />
+            <StatsExplorer league={league} teams={favoriteTeams} followed={followedPlayers} />
             <StatsBlock league={league} players={followedPlayers} />
           </>
         )}

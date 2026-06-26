@@ -878,5 +878,7 @@
   font-variant-numeric: tabular-nums;
 }
 .spc-line.muted { color: var(--text-muted); font-size: 0.78rem; text-transform: none; letter-spacing: 0; }
+.stat-player-card.followed { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-dim), 0 12px 30px rgba(0,0,0,0.35); }
+.spc-star { font-style: normal; color: var(--yellow); font-size: 0.78rem; margin-left: 5px; }
 @media (max-width: 600px) { .stat-grid { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 420px) { .stat-grid { grid-template-columns: 1fr; } }
