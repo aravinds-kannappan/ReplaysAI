@@ -25,16 +25,17 @@ We do not have a labeled corpus of "ESPN game facts -> ideal ReplaysAI newslette
 
 1. Real, structured ESPN data (box scores, play-by-play, leaders, standings, news) for thousands of
    past NBA + NFL games, reachable through the app's own `api/espn_public.py` provider.
-2. A strong general model (the teacher) that, given those facts and the exact production prompt,
+2. A strong open teacher model on Orthogonal that, given those facts and the exact production prompt,
    writes a good, grounded draft.
 
 So we **distill**: the teacher generates targets from real facts, a grounding filter throws out any
-draft that invents a number or a name, and we fine-tune a small open student on the survivors. The
+draft that invents a number or a name, and we fine-tune a smaller open student on the survivors. The
 student learns our format and voice cheaply, runs cheaply, and (because we reuse the production
 prompt builders) is trained on exactly the inputs it will see in production.
 
-Student candidates (owner preference, served on Baseten / Orthogonal): GPT-OSS-20B, Qwen2.5-7B, or a
-DeepSeek distill. LoRA / QLoRA adapters, one per writer.
+**Teacher** (big, on Orthogonal, OpenAI-compatible): DeepSeek-V3 / Kimi-K2 / GLM-4.5 / GPT-OSS-120B.
+No Anthropic key required. **Student** (small, LoRA/QLoRA, one adapter per writer): Qwen2.5-7B (fits a
+single Colab A100 in bf16) or GPT-OSS-20B (QLoRA, matches the Orthogonal serving family).
 
 ---
 
@@ -66,15 +67,16 @@ Writes one broadcast record per finished game (its `facts`), and one newsletter 
 (synthetic fan profile x ISO week), where a profile is a random subset of real teams/players. Inputs
 only: no targets yet.
 
-### 2. Distill targets from the teacher
+### 2. Distill targets from the teacher (Orthogonal)
 ```bash
-export ANTHROPIC_API_KEY=...            # teacher key (one-time generation pass)
-python training/distill.py --task newsletter --limit 4000
-python training/distill.py --task broadcast --limit 6000
+export ORTHO_BASE_URL=https://...       # Orthogonal OpenAI-compatible base URL
+export ORTHO_API_KEY=...                # Orthogonal key
+python training/distill.py --task newsletter --limit 4000 --teacher-model deepseek-ai/DeepSeek-V3
+python training/distill.py --task broadcast  --limit 6000 --teacher-model deepseek-ai/DeepSeek-V3
 ```
 Each record is sent through the **same system+prompt** the API uses at serve time
-(`api.newsletter._write_newsletter` prompt / `api.broadcast._broadcast_prompt`), so the student never
-sees a distribution shift.
+(`api.newsletter._newsletter_prompt` / `api.broadcast._broadcast_prompt`), so the student never
+sees a distribution shift. No Anthropic key is used.
 
 ### 3. Grounding filter
 ```bash
@@ -84,12 +86,13 @@ python training/grounding.py --task broadcast
 Rejects any pair whose target contains a number or a capitalized name not present in the facts. This
 is the anti-hallucination guarantee, enforced on the training data itself.
 
-### 4. LoRA fine-tune
+### 4. LoRA fine-tune (Colab A100)
 ```bash
+# single A100 40GB: Qwen2.5-7B in bf16 LoRA, or GPT-OSS-20B with --qlora
 python training/train_writer_lora.py --task newsletter --base Qwen/Qwen2.5-7B-Instruct
 python training/train_writer_lora.py --task broadcast  --base Qwen/Qwen2.5-7B-Instruct
 ```
-Then deploy each adapter on Baseten and point the API's `TRAINED_*` env vars at it.
+Then deploy each adapter on Orthogonal / Baseten and point the API's `TRAINED_*` env vars at it.
 
 ### 5. Curation ranker
 ```bash

@@ -7,9 +7,17 @@ is formatted with the base model's chat template as
 so the student learns our exact format and voice. Deploy the resulting adapter on
 Baseten and point the API's TRAINED_* env vars at it.
 
-Usage (needs a GPU; install training/requirements.txt in a separate venv):
-  python training/train_writer_lora.py --task newsletter --base Qwen/Qwen2.5-7B-Instruct
-  python training/train_writer_lora.py --task broadcast  --base Qwen/Qwen2.5-7B-Instruct --epochs 3
+Colab A100 recipe (single 40GB GPU):
+  # Qwen2.5-7B fits in bf16 LoRA; GPT-OSS-20B fits with --qlora (4-bit) and
+  # matches the Orthogonal serving family so deployment is one adapter upload.
+  !pip install -r training/requirements.txt
+  !python training/train_writer_lora.py --task newsletter --base Qwen/Qwen2.5-7B-Instruct
+  !python training/train_writer_lora.py --task broadcast  --base Qwen/Qwen2.5-7B-Instruct
+  # 20B student instead:
+  !python training/train_writer_lora.py --task newsletter --base openai/gpt-oss-20b --qlora
+
+Then upload out/<task>-writer to Orthogonal/Baseten and set the API env vars
+TRAINED_BASE_URL / TRAINED_API_KEY / NEWSLETTER_MODEL / BROADCAST_MODEL.
 """
 from __future__ import annotations
 

@@ -8,8 +8,8 @@ certifi>=2024.7.4
 pydantic==2.9.2
 pydantic-settings==2.5.2
 
-# Teacher (distillation)
-anthropic==0.111.0
+# Teacher (distillation) over Orthogonal's OpenAI-compatible API
+openai==1.58.1
 
 # Student fine-tuning (LoRA / QLoRA)
 torch>=2.3
