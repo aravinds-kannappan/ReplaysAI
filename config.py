@@ -7,16 +7,24 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     anthropic_api_key: str = ""
     # Default to Haiku for speed across the app (recaps, reels, briefings, sims).
-    # Opus is intentionally not used — it is far slower for this product's needs.
+    # Opus is intentionally not used: it is far slower for this product's needs.
     anthropic_model: str = "claude-haiku-4-5"
     anthropic_fallback_models: str = "claude-sonnet-4-6"
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
     youtube_api_key: str = ""
     redis_url: str = ""
-    clerk_secret_key: str = ""
-    clerk_issuer: str = ""  # e.g. https://clerk.yourdomain.com for custom Clerk domains
     allowed_origins: str = "*"
+
+    # Trained agents (Newsletter writer + Broadcast writer). These are our own
+    # fine-tuned open models, served over an OpenAI-compatible API (Baseten /
+    # Orthogonal). When set, they are the primary path for those two surfaces;
+    # both still fall back to the Anthropic LLM and then the deterministic
+    # template, so nothing hard-fails when they are unset. See training/README.md.
+    trained_base_url: str = ""       # e.g. https://model-xxxx.api.baseten.co/environments/production/sync/v1
+    trained_api_key: str = ""
+    newsletter_model: str = ""       # deployed adapter id for the newsletter writer
+    broadcast_model: str = ""        # deployed adapter id for the broadcast writer
 
     class Config:
         env_file = ".env"
@@ -30,9 +38,11 @@ class Settings(BaseSettings):
         "openai_model",
         "youtube_api_key",
         "redis_url",
-        "clerk_secret_key",
-        "clerk_issuer",
         "allowed_origins",
+        "trained_base_url",
+        "trained_api_key",
+        "newsletter_model",
+        "broadcast_model",
         mode="before",
     )
     @classmethod
@@ -53,7 +63,7 @@ class Settings(BaseSettings):
 
     @property
     def anthropic_fast_models(self) -> list[str]:
-        """Fastest model (Haiku) first — for latency-sensitive text (dashboard
+        """Fastest model (Haiku) first, for latency-sensitive text (dashboard
         briefing, what-ifs)."""
         models = self.anthropic_models
         fast = [m for m in models if "haiku" in m]

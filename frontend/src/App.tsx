@@ -5,14 +5,12 @@ import FloatingAssistant from "./components/FloatingAssistant";
 import Landing from "./pages/Landing";
 import Onboarding from "./pages/Onboarding";
 import Feed from "./pages/Feed";
-import DreamTeam from "./pages/DreamTeam";
 import ReelStudio from "./pages/ReelStudio";
 import ReelsPage from "./pages/ReelsPage";
 import BroadcastPlayer from "./pages/BroadcastPlayer";
 import NewsletterPage, { NewsletterShare } from "./pages/Newsletter";
 import GameDetail from "./pages/GameDetail";
 import PlayerProfile from "./pages/PlayerProfile";
-import Profile from "./pages/Profile";
 import "./App.css";
 
 const queryClient = new QueryClient({
@@ -46,12 +44,10 @@ export default function App() {
           <Route path="/broadcast/:gameId" element={<BroadcastPlayer />} />
           <Route path="/newsletter" element={<NewsletterPage />} />
           <Route path="/newsletter/share/:token" element={<NewsletterShare />} />
-          <Route path="/dream-team" element={<DreamTeam />} />
           <Route path="/reel/:gameId" element={<ReelStudio />} />
 
           <Route path="/game/:id" element={<GameDetail />} />
           <Route path="/player/:id" element={<PlayerProfile />} />
-          <Route path="/profile" element={<Profile />} />
         </Routes>
         <FloatingAssistant />
       </BrowserRouter>

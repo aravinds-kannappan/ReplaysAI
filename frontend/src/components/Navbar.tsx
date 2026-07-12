@@ -3,7 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 // The global navbar is hidden anywhere a surface already owns its chrome:
 //  • the landing page renders its own .lp-nav
 //  • the dashboard has a left sidebar
-//  • full-screen feature pages (reels, broadcast, newsletter, dream team) each
+//  • full-screen feature pages (reels, broadcast, newsletter) each
 //    have their own header with a back link
 // That leaves only the lightweight "detail" pages (demo, game, player, profile),
 // where a slim top bar back to the dashboard is genuinely useful.
@@ -11,7 +11,7 @@ const HIDE_EXACT = new Set([
   "/",
   "/feed", "/dashboard", "/season", "/games", "/stats", "/extras", "/picks",
   "/predictions", "/roster", "/news", "/chat", "/leaderboard",
-  "/reels", "/newsletter", "/dream-team",
+  "/reels", "/newsletter",
 ]);
 const HIDE_PREFIX = ["/broadcast/", "/reel/", "/newsletter/share/"];
 

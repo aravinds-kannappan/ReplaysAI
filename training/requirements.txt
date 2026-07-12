@@ -1,0 +1,25 @@
+# Offline training deps ONLY. Never add these to the repo-root requirements.txt:
+# they are large and must stay out of the Vercel serverless function.
+# Install into a separate venv: pip install -r training/requirements.txt
+
+# Shared with the app (dataset builder reuses api/espn_public.py)
+httpx==0.27.2
+certifi>=2024.7.4
+pydantic==2.9.2
+pydantic-settings==2.5.2
+
+# Teacher (distillation)
+anthropic==0.111.0
+
+# Student fine-tuning (LoRA / QLoRA)
+torch>=2.3
+transformers>=4.44
+peft>=0.12
+trl>=0.9
+datasets>=2.20
+accelerate>=0.33
+bitsandbytes>=0.43            # QLoRA 4-bit; optional on CPU-only boxes
+
+# Curation ranker (exports linear weights; not needed at serve time)
+scikit-learn>=1.4
+numpy>=1.26

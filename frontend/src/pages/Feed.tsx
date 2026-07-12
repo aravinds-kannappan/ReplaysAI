@@ -6,12 +6,13 @@ import axios from "axios";
 import {
   useFeed, useUpcomingGames, useNews, useRosterPlayers,
   useCreatePrediction, usePredictions, useSaveRoster, useRosters, usePlayerStats,
-  useRankings, type Standing,
+  useRankings, useLeaderboard, useMyRank, type Standing,
 } from "../hooks/usePredictions";
 import { useCurrentUser, type FollowedPlayer, type FavoriteTeam } from "../hooks/useUser";
 import { useGames } from "../hooks/useGames";
 import ScoreCard from "../components/ScoreCard";
 import { apiPath } from "../lib/api";
+import { getDeviceId } from "../lib/device";
 import type { Game } from "../types";
 
 type League = "NBA" | "NFL";
@@ -293,35 +294,35 @@ function PredictionLab({
   );
 }
 
-function DemoLeaderboardPanel({ league }: { league: League }) {
-  const predictions = useMemo(() => {
-    try { return JSON.parse(window.localStorage.getItem("replaysai:predictions") || "[]") as { game_id: number }[]; }
-    catch { return []; }
-  }, []);
-  const rosters = useMemo(() => {
-    try { return JSON.parse(window.localStorage.getItem("replaysai:rosters") || "[]") as { player_ids?: number[] }[]; }
-    catch { return []; }
-  }, []);
-  const userPoints = predictions.length * 10 + rosters.reduce((sum, roster) => sum + (roster.player_ids?.length ?? 0) * 3, 0);
-  const rows = [
-    { name: "You", detail: `${predictions.length} picks · ${rosters.length} rosters`, points: userPoints, me: true },
-    { name: "Film Room", detail: "11 correct · 3 streak", points: 410 },
-    { name: "Fourth Quarter", detail: "8 correct · 5 badges", points: 355 },
-    { name: "Deep Cut", detail: "7 correct · reel master", points: 295 },
-  ].sort((a, b) => b.points - a.points);
+type LeaderRow = {
+  rank: number; user_id: string; display_name: string; total_points: number;
+  correct_predictions: number; total_predictions: number; login_streak: number;
+};
+function LeaderboardPanel() {
+  const { data: leaders = [], isLoading } = useLeaderboard() as { data?: LeaderRow[]; isLoading: boolean };
+  const { data: mine } = useMyRank() as { data?: { my_rank: number; total_users: number } };
+  const myId = getDeviceId();
   return (
     <section className="dash-panel sleeper-board">
-      <div className="panel-heading"><div><span>{league} picks ladder</span><h2>Local leaderboard preview</h2></div></div>
+      <div className="panel-heading"><div><span>Global picks ladder · points from correct picks</span><h2>Leaderboard</h2></div>
+        {mine && <span className="panel-tag">You: #{mine.my_rank} of {mine.total_users}</span>}
+      </div>
+      {isLoading && <p className="loading-text">Loading the ladder…</p>}
+      {!isLoading && leaders.length === 0 && (
+        <p className="empty-state">No ranked fans yet. Lock a pick below, and when the game finishes you earn points and appear here.</p>
+      )}
       <div className="sleep-table">
-        {rows.map((row, index) => (
-          <div key={row.name} className={`sleep-row ${row.me ? "me" : ""}`}>
-            <b>{index + 1}</b>
-            <div><strong>{row.name}</strong><span>{row.detail}</span></div>
-            <em>{row.points}</em>
+        {leaders.map((row) => (
+          <div key={row.user_id} className={`sleep-row ${row.user_id === myId ? "me" : ""}`}>
+            <b>{row.rank}</b>
+            <div>
+              <strong>{row.user_id === myId ? "You" : row.display_name}</strong>
+              <span>{row.correct_predictions}/{row.total_predictions} correct · {row.login_streak} streak</span>
+            </div>
+            <em>{row.total_points}</em>
           </div>
         ))}
       </div>
-      <p className="panel-note">This previews the Sleeper-style experience locally. A real global ladder needs persistent server storage before launch.</p>
     </section>
   );
 }
@@ -339,7 +340,7 @@ function NewsBlock({ league, teams, players, embedded }: { league: League; teams
   const { data: news = [], isLoading } = useNews(league, keywords);
 
   const empty = keywords.length === 0
-    ? <p className="empty-state" style={{ padding: "8px 0", fontSize: "0.82rem" }}>Follow teams/players for a tailored feed — never general news. <Link to="/demo">Pick →</Link></p>
+    ? <p className="empty-state" style={{ padding: "8px 0", fontSize: "0.82rem" }}>Follow teams/players for a tailored feed, never general news. <Link to="/demo">Pick →</Link></p>
     : isLoading ? <p className="loading-text">Finding your stories…</p>
     : news.length === 0 ? <p className="empty-state" style={{ padding: "8px 0", fontSize: "0.82rem" }}>No recent stories about your {league} picks.</p> : null;
 
@@ -428,7 +429,6 @@ function RosterPanel({ league }: { league: League }) {
     <section className="dash-panel">
       <div className="panel-heading"><div><span>{league} fantasy</span><h2>Roster ({picked.size}/8)</h2></div>
         <div style={{ display: "flex", gap: 8 }}>
-          <Link to="/dream-team" className="btn-ghost">Championship sim →</Link>
           <button className="btn-primary" disabled={picked.size === 0 || save.isPending} onClick={() => save.mutate({ sport: league, player_ids: [...picked] })}>{save.isPending ? "Saving…" : saved ? "Update" : "Save"}</button>
         </div></div>
       <div className="roster-pool">
@@ -585,27 +585,21 @@ function RecentResults({ games }: { games: Game[] }) {
   );
 }
 
-/* ── New-feature spotlight (discoverability for Dream Team + narrated reels) ── */
+/* ── Feature spotlight (discoverability for narrated reels + newsletter) ── */
 function FeatureSpotlight() {
   const navigate = useNavigate();
   return (
     <div className="feature-spotlight">
-      <button className="fs-card fs-dream" onClick={() => navigate("/dream-team")}>
-        <span className="fs-badge">NEW</span>
-        <strong>Dream Team Simulator</strong>
-        <p>Draft real stars and run 10,000 Monte-Carlo seasons for your championship odds.</p>
-        <span className="fs-go">Build your squad →</span>
-      </button>
       <button className="fs-card fs-reel" onClick={() => navigate("/reels")}>
         <span className="fs-badge">NEW</span>
         <strong>AI Reel Director</strong>
-        <p>Tell the AI what reel to build in plain language — or launch a full Broadcast mode.</p>
+        <p>Tell the AI what reel to build in plain language, or launch a full Broadcast mode.</p>
         <span className="fs-go">Open reel director →</span>
       </button>
       <button className="fs-card fs-season" onClick={() => navigate("/newsletter")}>
         <span className="fs-badge">NEW</span>
         <strong>Weekly Newsletter</strong>
-        <p>Your personalized sports digest — team results, player stats, hot takes, and picks.</p>
+        <p>Your personalized sports digest: team results, player stats, hot takes, and picks.</p>
         <span className="fs-go">Read this week's issue →</span>
       </button>
     </div>
@@ -657,7 +651,6 @@ export default function Feed() {
           <div className="dash-nav-divider" />
           <Link to="/reels" className="dash-nav-link">Reels <span className="nav-new">NEW</span></Link>
           <Link to="/newsletter" className="dash-nav-link">Newsletter <span className="nav-new">NEW</span></Link>
-          <Link to="/dream-team" className="dash-nav-link">Dream Team <span className="nav-new">NEW</span></Link>
         </nav>
         <div className="dash-side-card">
           <span>Following</span>
@@ -697,7 +690,7 @@ export default function Feed() {
               <UpNext league={league} favTeams={favoriteTeams} />
               <FeatureSpotlight />
               <details className="dash-more" onToggle={(e) => setMoreOpen((e.target as HTMLDetailsElement).open)}>
-                <summary>Analysis — predictions, what-ifs, player stats</summary>
+                <summary>Analysis: predictions, what-ifs, player stats</summary>
                 {moreOpen && (
                   <div className="dash-more-body">
                     <PredictionLab league={league} teams={favoriteTeams} games={games} />
@@ -744,14 +737,25 @@ export default function Feed() {
           <>
             <PicksPanel league={league} />
             <RosterPanel league={league} />
-            <DemoLeaderboardPanel league={league} />
+            <LeaderboardPanel />
             <section className="dash-panel">
-              <div className="panel-heading"><div><span>Your account</span><h2>Points & badges</h2></div></div>
+              <div className="panel-heading"><div><span>Your account · points from correct picks</span><h2>Points & badges</h2></div></div>
               <div className="leaders-stats">
                 <div className="dashboard-stat"><strong>{user?.total_points ?? 0}</strong><span>Points</span></div>
                 <div className="dashboard-stat"><strong>{user?.login_streak ?? 0}</strong><span>Streak</span></div>
-                <div className="dashboard-stat"><strong>{(user?.badges ?? []).length}</strong><span>Badges</span></div>
+                <div className="dashboard-stat"><strong>{Math.round((user?.prediction_accuracy ?? 0) * 100)}%</strong><span>Accuracy</span></div>
+                <div className="dashboard-stat"><strong>{user?.correct_predictions ?? 0}/{user?.total_predictions ?? 0}</strong><span>Correct</span></div>
               </div>
+              {(user?.badges ?? []).length > 0 && (
+                <div className="badge-row">
+                  {(user?.badges ?? []).map((b: { slug: string; name: string; icon: string }) => (
+                    <span key={b.slug} className="badge-chip" title={b.name}>{b.icon} {b.name}</span>
+                  ))}
+                </div>
+              )}
+              {(user?.total_predictions ?? 0) === 0 && (
+                <p className="panel-note">Lock a pick in the board above. When the game finishes, correct picks earn points and badges, and you climb the ladder.</p>
+              )}
             </section>
           </>
         )}

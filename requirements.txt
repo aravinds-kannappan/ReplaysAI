@@ -7,11 +7,9 @@
 fastapi==0.115.0
 uvicorn==0.30.6
 
-# Cache (optional — endpoints degrade gracefully without REDIS_URL)
+# Persistence + cache (optional — endpoints degrade gracefully without REDIS_URL).
+# Also the durable store for picks, points, and the leaderboard (db/store.py).
 redis==5.1.1
-
-# Auth
-PyJWT==2.10.1
 
 # HTTP client (ESPN public API, YouTube search)
 httpx==0.27.2

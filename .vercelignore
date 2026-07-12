@@ -1,0 +1,13 @@
+# Keep offline-only code out of the Vercel serverless function so the Python
+# bundle stays under the size limit. None of these are imported by the API
+# (app.py -> api/*, which uses cache/, db/store.py, middleware/, config, video/).
+
+training/          # trained-agent pipeline (torch/transformers/peft, offline)
+ingestion/         # offline data ingestion (SQLAlchemy, heavy CV deps)
+agents/            # offline agent experiments, not wired into the API
+supabase/          # legacy SQL migrations, unused (no database at runtime)
+
+# Dev + docs
+.venv/
+docker-compose.yml
+requirements-ingestion.txt

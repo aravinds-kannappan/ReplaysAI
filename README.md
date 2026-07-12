@@ -1,14 +1,13 @@
 # ReplaysAI
 
-ReplaysAI turns real NBA & NFL data into a **personalized, agent-driven sports desk**: a streaming
-feed, narrated highlight reels you can interrupt and ask questions during, a Monte-Carlo "dream
-team" championship simulator, and AI game recaps — all keyed to the teams and players you pick, with
-**no signup**.
+ReplaysAI turns real NBA and NFL data into a personalized, agent-driven sports desk: a streaming
+feed, narrated highlight reels, a two-host AI broadcast, a real pick'em ladder, and a personalized
+weekly newsletter, all keyed to the teams and players you pick, with no signup.
 
 Everything a fan consumes as fact (players, games, scores, play-by-play, box scores, season stats,
-news, highlight clips) is **real, live ESPN public-API data**. The only modeled elements are clearly
-labeled as such: the championship simulation is a forecast, and the landing-page court animation is
-illustrative.
+news, highlight clips) is real, live ESPN public-API data. Generated prose (recaps, reel narration,
+newsletter, broadcast) is grounded strictly in that data, and the UI labels which engine produced it
+(trained model, general LLM, or deterministic template).
 
 ---
 
@@ -16,14 +15,17 @@ illustrative.
 
 | Surface | Route | What it does |
 |---|---|---|
-| **Cinematic landing** | `/` | A live `<canvas>` broadcast hero — players drift, a ball passes with a glowing trail, a scan line sweeps, and four named agents (**ScoutAgent / StatAgent / RefAgent / PredictAgent**) overlay tracking, stats, rule reads, and a ticking win-probability. |
-| **Onboarding** | `/onboarding` | Pick leagues → teams → star players. Stored anonymously in `localStorage`. No account. |
-| **Dashboard** | `/feed` | Daily AI brief, upcoming games for your teams, your stars' season lines, recent results, and a standings / leaders / tailored-news rail. Heavy analytics collapse behind "More analysis." |
+| **Cinematic landing** | `/` | A live `<canvas>` broadcast hero with four named agents overlaying tracking, stats, rule reads, and a ticking win-probability. |
+| **Onboarding** | `/demo` | Pick leagues, teams, and star players. Stored anonymously in `localStorage`. No account. |
+| **Dashboard** | `/feed` | Upcoming games, your stars' season lines, recent results, standings / leaders / tailored-news rail. Analysis (predictions, what-ifs, player stats) collapses behind "More analysis." |
 | **Season** | `/season` | The full last-10-seasons game list for your teams plus per-team form charts. |
-| **Reels** | `/reels` → `/reel/:gameId` | Tiered narrated highlight reels (Pulse 2m / Story 5m / Deep Cut 10m) from **real ESPN clips**, voiced by TTS over ducked clip audio, with stat overlays and **interrupt-and-ask** (pause, ask the analyst by mic or text, resume). |
-| **Dream Team** | `/dream-team` | Draft real stars → server-side **10,000-season Monte-Carlo** → championship odds, projected record, playoff-round chart, a CoachAgent chemistry read, an AnalystAgent X-factor, and a shareable PNG card. |
+| **Stats** | `/stats` | A stats browser scoped to your teams' rosters (real ESPN season stats), by position. |
+| **Extras** | `/extras` | A **real** pick'em board, fantasy roster builder, the **live leaderboard**, and your points / streak / badges. |
+| **Reels** | `/reels` -> `/reel/:gameId` | Tiered narrated highlight reels (2m / 5m / 10m) from real ESPN clips, voiced by TTS over ducked clip audio, with interrupt-and-ask. |
+| **Broadcast** | `/broadcast/:gameId` | A two-host AI broadcast (play-by-play + analyst) synced to the story player. |
+| **Newsletter** | `/newsletter` -> `/newsletter/share/:token` | A personalized weekly digest, curated by a learned ranker and written by the newsletter agent. Shareable by real link. |
 | **Game detail** | `/game/:id` | LLM recap, your-team "fan" recap, highlight reel, and play-by-play. |
-| **Extras** | `/extras` | Pick'em board, fantasy roster builder, leaderboard preview. |
+| **Player** | `/player/:id` | A followed player's real season line and profile. |
 
 ---
 
@@ -31,114 +33,61 @@ illustrative.
 
 ```
                           Browser (Vite + React 19)
-   anonymous identity in localStorage · TanStack Query · React Router 7
-                                   │  /api/*  (Vite dev-proxy → :8001)
-                                   ▼
-                       FastAPI app  (app.py → routers)
-   ┌───────────────────────────────────────────────────────────────────┐
-   │  feed · games · recaps · reels · chat · dream_team · rankings ·    │
-   │  predictions · fantasy · news · insights · leaderboards · waitlist │
-   └───────────────┬───────────────────────────────┬───────────────────┘
-                   │                                │
-        SportsData (espn_public.py)         LLM layer (Anthropic-first)
-   real ESPN endpoints, NBA + NFL           claude-opus-4-8
-   in-memory (60s) + Redis cache            → sonnet-4-6 → haiku-4-5
-   teams · games · plays · box · clips      → openai gpt-4o-mini
-                                            → deterministic data fallback
+   anonymous device id in localStorage · TanStack Query · React Router 7
+                        │  /api/*  (X-Device-Id header; Vite dev-proxy -> :8001)
+                        ▼
+                    FastAPI app (app.py -> routers)
+   ┌──────────────────────────────────────────────────────────────────────┐
+   │ feed · games · recaps · reels · broadcast · chat · predictions ·      │
+   │ rankings · fantasy · leaderboard · news · insights · newsletter       │
+   └──────────┬───────────────────────┬────────────────────┬──────────────┘
+              │                        │                    │
+     SportsData (espn_public.py)   Redis store (db/store)   LLM / trained agents
+   real ESPN endpoints, NBA+NFL   picks · points ·         newsletter + broadcast:
+   in-memory (60s) + Redis cache  leaderboard ·            trained model -> Anthropic
+   teams·games·plays·box·clips    newsletter share         -> deterministic fallback
 ```
 
-### Backend — FastAPI, stateless, serverless-friendly
-- `app.py` composes ~14 routers; `main.py` exposes `app` for Vercel.
-- **No database.** All state is either fetched from ESPN, cached, or stored client-side. This keeps
-  the API stateless and deployable as serverless functions.
-- **`espn_public.py` is the single `SportsDataProvider`** — every ESPN call lives here behind small
-  typed functions (`fetch_espn_games`, `fetch_espn_game_summary`, `extract_summary_videos`,
-  `fetch_espn_athlete_stats`, …). Swapping data sources means reimplementing this one module.
-- **Two-tier cache:** a process-local dict with a 60s TTL (warm serverless instances) plus optional
-  Redis (`cache/redis_client.py`). Both degrade silently to "no cache" when absent — nothing in the
-  request path requires Redis.
+### Backend: FastAPI, stateless functions
+- `app.py` composes the routers; `main.py` / `api/index.py` expose `app` for Vercel.
+- **`espn_public.py` is the single `SportsDataProvider`.** Every ESPN call lives here behind small
+  typed functions. Swapping data sources means reimplementing this one module.
+- **Two-tier cache:** a process-local dict (60s TTL) plus optional Redis. Both degrade silently.
 
-### LLM layer — Anthropic-first with graceful degradation
-- Primary model `claude-opus-4-8`, falling back through `claude-sonnet-4-6` → `claude-haiku-4-5`,
-  then to OpenAI `gpt-4o-mini` if only that key is present (`config.py:anthropic_models`).
-- **Every LLM path has a deterministic, data-backed fallback.** Recaps, reel narration, the dream-team
-  CoachAgent/AnalystAgent, and the in-app assistant all produce a grounded response with **zero API
-  keys configured** — the app never hard-fails on a missing/timed-out model.
-- Anti-hallucination is enforced in the system prompts: agents are told to ground strictly in the
-  supplied facts and never invent plays, stats, or scores.
+### Identity and persistence: anonymous, login-free, real
+- Identity is an anonymous **device id** (one UUID per browser, `lib/device.ts`), sent as the
+  `X-Device-Id` header and resolved by `middleware/identity.py`. No auth provider, no PII.
+- **`db/store.py`** is a small Redis-backed store (Upstash / Vercel KV via `REDIS_URL`). It makes
+  picks, points, streaks, badges, the leaderboard, and newsletter share links **real and durable**.
+  Picks are scored lazily: when a picked game finishes (both scores present), the pick resolves on
+  the next read and points flow to the leaderboard sorted set. With no `REDIS_URL`, every store call
+  degrades to a no-op so local dev and the zero-config demo still run.
 
-### Agents (LLM-backed roles, not microservices)
-- **Recap** (`recaps.py`) — beat-writer recap from period scores, leaders, and weighted key plays.
-- **Reel director / voice** (`reels.py`) — ranks real clips, writes per-clip narration, builds a
-  conversational custom reel, and attaches stat overlays.
-- **CoachAgent / AnalystAgent** (`dream_team.py`) — chemistry modifier and X-factor for the sim.
-- **In-reel / dashboard assistant** (`chat.py`) — coordinates specialist perspectives; in a reel it
-  answers about the exact paused clip using `{gameId, segmentId, clipTimestamp, recentNarration}`.
+### LLM and trained agents
+- General LLM path (`api/recaps.py:llm_text`): Anthropic first (`claude-haiku-4-5` -> Sonnet),
+  then OpenAI, then a deterministic, data-backed fallback. Every LLM feature works with zero keys.
+- **Trained agents** for the two flagship writers. The **newsletter** and **broadcast** surfaces
+  call our own fine-tuned open models over an OpenAI-compatible API (`recaps.py:trained_text`), and
+  fall back to the general LLM and then the template. The newsletter's content is ordered by a
+  learned **curation ranker** (`api/curation.py`, pure-Python inference). See
+  [`training/`](training/README.md) for the dataset, distillation, LoRA fine-tune, and ranker
+  training. Until the models are trained and configured, these surfaces run on the LLM/template and
+  the heuristic ranker, and the API reports which engine ran (`source`, `curation`).
 
-### Frontend — Vite + React 19
-- React Router 7 with a single tabbed `Feed` shell (`/feed`, `/season`, `/reels`, `/extras`) plus
-  dedicated routes for the heavy surfaces (`/dream-team`, `/reel/:gameId`, `/game/:id`).
-- **TanStack Query** owns server state; **`localStorage`** owns the anonymous fan profile (teams,
-  players, picks, rosters). No auth provider is required.
-- Reels are voiced with the browser **`speechSynthesis`** API and accept voice input via
-  **`SpeechRecognition`**; the dream-team card exports via `html-to-image`. The landing hero is a
-  `requestAnimationFrame` canvas animation (with a `prefers-reduced-motion` static fallback).
+### Frontend: Vite + React 19
+- React Router 7 with a tabbed `Feed` shell plus dedicated routes for the heavy surfaces.
+- **TanStack Query** owns server state; **`localStorage`** owns the anonymous team/player picks; the
+  device id keys the server-side earned state (points, leaderboard).
+- Reels/broadcast are voiced with `speechSynthesis` and accept voice input via `SpeechRecognition`.
+  The landing hero is a `requestAnimationFrame` canvas with a `prefers-reduced-motion` fallback.
 
 ---
 
-## System design notes
-
-**Independent, streamable endpoints.** Feed tiles, reel tiers, recaps, and sim results are separate
-endpoints so the UI fills in progressively rather than blocking on the slowest agent. Query keys are
-derived from the personalization inputs, so React Query caches per-fan.
-
-**Recap keyed off the scoreline, not the status string.** ESPN's by-id endpoint is unreliable — it
-sometimes labels a finished game (with a final score) as `"scheduled"`. Recaps and the reel game-list
-therefore treat **"both scores present" as played**, so finished games reliably get the full LLM
-recap and appear as reel-able past games even in the offseason. Truly future games (null scores) get
-a clean preview instead.
-
-**Monte-Carlo dream team.** `dream_team.py` derives a per-player rating vector from real ESPN season
-stats, applies a chemistry multiplier from the CoachAgent, then runs 10,000 pure-Python seasons:
-each draws form noise, a normal-approximated win total, a playoff seed, and a round-by-round bracket.
-Output is championship odds, projected record, and a playoff-round distribution. A league-average
-overall maps to ~0.5 strength so an elite roster is dominant but believable (~65-70 wins, not 82),
-and the RNG is seeded so identical rosters are reproducible. Results cache by a roster signature.
-
-**Reel pipeline (rights-safe MVP).** Clips are **real ESPN highlight video** ranked by importance ×
-keyword relevance and spread across the game for the chosen time budget; narration is generated text
-spoken client-side; overlays (scorebug, leader stat line, a model win-probability that climbs to the
-winner) are attached server-side. The player ducks clip audio under narration and supports
-interrupt-and-ask against the same chat endpoint the dashboard uses.
-
-**Player-stats coverage.** Followed players can come from a team's roster (below the top of the
-leaderboard), so `fetch_espn_athlete_stats` scans deep enough to cover them and falls back to a
-broader stat-label set; deep-bench players with no recorded minutes show a graceful "updates as games
-post" state rather than a hard blank.
-
----
-
-## Tradeoffs (deliberate, and what they cost)
-
-| Decision | Why | Cost / follow-up |
-|---|---|---|
-| **No database; `localStorage` identity** | Stateless, zero-ops, instant onboarding, no PII | Profiles don't sync across devices; global leaderboards need a real store. (deviceId + JSON export/import is the planned next step.) |
-| **Real ESPN clips, not generated video** | Rights-safe and ships today | Can't synthesize plays that lack published video. A `ClipProvider`-style swap-in for AI tactical-diagram clips is the planned upgrade. |
-| **Browser TTS, not a Gateway voice** | No backend audio infra; works offline of any TTS vendor | Voice quality is the device's; true SSE streaming + server-side TTS is a follow-up. The segment DTO already carries the narration text for that swap. |
-| **Non-streaming `/api/chat` for interrupt-and-ask** | Reuses the existing, well-tested assistant | No token-by-token streaming or server tool-calling yet; the reel context is passed as compact structured text. |
-| **10k seasons in pure Python (no numpy)** | Keeps the serverless image small; ~sub-second | Heavier sims would want vectorization; mitigated by Redis caching on a roster signature. |
-| **Anthropic-first with full fallback chain** | Best quality when keys exist, never a hard fail | A deterministic recap/narration is lower-fidelity than the model output. |
-| **Competition (share codes, Dream-Team League)** | Scoped out of the current build | Leaderboard is a local preview until a durable store is added. |
-
----
-
-## Data provenance
-
+## Data provenance and honesty
 Real, live ESPN data: players, teams, games, scores, play-by-play, box scores, season stats,
-standings, leaders, news, and highlight clips. LLM text (recaps, narration, X-factor, chat) is
-AI-written prose grounded only in that real data. **Modeled / illustrative** (and labeled as such in
-the UI): the dream-team simulation outputs (a forecast from real ratings) and the landing-page court
-animation (stylized — the free ESPN feed has no x/y player-tracking coordinates).
+standings, leaders, news, and highlight clips. Generated text is grounded only in that data. The UI
+never claims a model that did not run: the newsletter footer and API responses label the engine as
+**trained**, **LLM**, or **deterministic**, and the curation ranker as **trained** or **heuristic**.
 
 ---
 
@@ -148,28 +97,24 @@ animation (stylized — the free ESPN feed has no x/y player-tracking coordinate
 |---|---|
 | Backend | Python 3.12, FastAPI, Uvicorn, httpx, Pydantic |
 | Data | ESPN public API (NBA + NFL, no key) |
-| LLM | Anthropic `claude-opus-4-8` (+ Sonnet/Haiku fallback); OpenAI `gpt-4o-mini` optional |
-| Cache | In-memory (60s TTL) + optional Redis 7 |
-| Frontend | React 19, TypeScript, Vite, React Router 7, TanStack Query, react-markdown, hls.js, html-to-image |
-| Voice | Browser `speechSynthesis` / `SpeechRecognition` |
+| Store | Redis (Upstash / Vercel KV): picks, points, leaderboard, newsletter share |
+| LLM | Anthropic `claude-haiku-4-5` (+ Sonnet); OpenAI optional; deterministic fallback |
+| Trained agents | Fine-tuned open model (GPT-OSS / Qwen / DeepSeek) on Baseten, OpenAI-compatible |
+| Frontend | React 19, TypeScript, Vite, React Router 7, TanStack Query, react-markdown, hls.js |
 | Deploy | Vercel (serverless functions + static frontend) |
 
 ---
 
 ## Environment
+No keys are required. See `.env.example`. Highlights:
 
-No keys are required to run — the app degrades to data-backed responses. To enable the AI features:
-
-| Env var | Required? | Purpose |
-|---|---|---|
-| `ANTHROPIC_API_KEY` | recommended | Primary LLM (recaps, narration, sim agents, chat) |
-| `OPENAI_API_KEY` | optional | Fallback provider when no Anthropic key |
-| `REDIS_URL` | optional | Cross-instance cache for standings, recaps, sims |
-| `ALLOWED_ORIGINS` | optional | CORS origins (default localhost:5173/3000) |
-| `VITE_API_BASE_URL` | optional (frontend) | Empty for same-origin; set when API is on another origin |
-
-There is **no auth provider requirement** — the app is anonymous by default; the Clerk middleware
-remains as an optional pass-through and is not needed to run.
+| Env var | Purpose |
+|---|---|
+| `ANTHROPIC_API_KEY` | General LLM (recaps, reels, chat, newsletter/broadcast fallback) |
+| `OPENAI_API_KEY` | Optional LLM fallback |
+| `REDIS_URL` | Durable store: real picks, leaderboard, gamification, newsletter share |
+| `TRAINED_BASE_URL` / `TRAINED_API_KEY` / `NEWSLETTER_MODEL` / `BROADCAST_MODEL` | Trained newsletter + broadcast writers (see `training/`) |
+| `ALLOWED_ORIGINS` | CORS origins (default localhost:5173/3000) |
 
 ---
 
@@ -181,17 +126,16 @@ remains as an optional pass-through and is not needed to run.
 # 1. Backend
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env            # add ANTHROPIC_API_KEY to enable AI (optional)
+cp .env.example .env            # optional: add keys / REDIS_URL to enable AI + persistence
 uvicorn app:app --reload --port 8001
 
 # 2. Frontend (separate shell)
 cd frontend
 npm install
-npm run dev                     # http://localhost:5173, proxies /api → :8001
+npm run dev                     # http://localhost:5173, proxies /api -> :8001
 ```
 
-Open `http://localhost:5173`, pick teams/players, and the feed, reels, recaps, and dream-team
-simulator populate from real ESPN data.
+Training the agents is a separate offline workflow: see [`training/README.md`](training/README.md).
 
 ---
 
@@ -199,25 +143,20 @@ simulator populate from real ESPN data.
 
 ```
 ReplaysAI/
-├── app.py                  # FastAPI app factory + router registration
-├── main.py                 # Vercel entrypoint (exports `app`)
-├── config.py               # Pydantic settings + model fallback chain
+├── app.py / main.py         # FastAPI app factory + Vercel entrypoint
+├── config.py                # settings + LLM / trained-model config
 ├── api/
-│   ├── espn_public.py      # SportsDataProvider — all ESPN calls + caching
-│   ├── feed.py             # /api/feed (favorite-team filtered) + fan recaps
-│   ├── games.py            # games list/detail/plays/highlights
-│   ├── recaps.py           # llm_text() + recap pipeline (scoreline-keyed)
-│   ├── reels.py            # tiered real-clip reels, overlays, conversational director
-│   ├── dream_team.py       # rating vectors + CoachAgent + 10k Monte Carlo + AnalystAgent
-│   ├── chat.py             # assistant + in-reel interrupt-and-ask context
-│   ├── rankings.py         # standings, team stars, player stats
-│   ├── predictions.py · fantasy.py · news.py · insights.py · leaderboards.py · waitlist.py
-├── cache/redis_client.py   # optional JSON cache with TTL
-├── middleware/clerk_auth.py# optional guest-by-default auth
-├── frontend/src/
-│   ├── pages/              # Landing, Onboarding, Feed, DreamTeam, ReelStudio, GameDetail, …
-│   ├── components/         # ReelPlayer (voiced), ScoreCard, Navbar, FloatingAssistant, …
-│   ├── hooks/              # useUser (localStorage identity), usePredictions, useGames
-│   └── lib/                # api base, auth (no-op guest)
-└── requirements.txt
+│   ├── espn_public.py       # SportsDataProvider: all ESPN calls + caching
+│   ├── feed.py · games.py · recaps.py · rankings.py · news.py · insights.py
+│   ├── predictions.py       # real pick'em: store picks, score on finish
+│   ├── leaderboards.py      # real leaderboard from the Redis sorted set
+│   ├── auth.py              # anonymous device profile (points/streak/badges)
+│   ├── reels.py · broadcast.py  # narrated reels + two-host broadcast (trained-first)
+│   ├── newsletter.py        # curated + written weekly digest (trained-first)
+│   └── curation.py          # learned newsletter curation ranker (pure-Python inference)
+├── db/store.py              # Redis store: picks, points, leaderboard, newsletter share
+├── middleware/identity.py   # anonymous device-id identity
+├── cache/redis_client.py    # optional JSON cache with TTL
+├── training/                # OFFLINE: dataset, distillation, LoRA, curation ranker, eval
+└── frontend/src/            # pages, components, hooks, lib
 ```
