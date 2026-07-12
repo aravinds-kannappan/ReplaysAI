@@ -22,7 +22,7 @@ from api.espn_public import (
     fetch_espn_game_by_id,
     fetch_espn_summary_by_id,
 )
-from api.recaps import _lead_changes, _period_scores, llm_text
+from api.recaps import _lead_changes, _period_scores, trained_text
 from config import get_settings
 
 router = APIRouter(prefix="/api/games", tags=["broadcast"])
@@ -58,11 +58,9 @@ def _extract_turns(raw: str) -> list[dict]:
     return salvaged
 
 
-def _build_broadcast_llm(facts: dict, seconds: int) -> list[dict] | None:
-    settings = get_settings()
-    if not settings.anthropic_api_key:
-        return None
-
+def _broadcast_prompt(facts: dict, seconds: int) -> tuple[str, str, int]:
+    """Build the (system, prompt, max_tokens) shared by the trained writer and
+    the Anthropic fallback, grounded strictly in this game's real data."""
     a, h = facts["away"], facts["home"]
     leaders = facts.get("leaders") or []
     periods = facts.get("periods") or []
@@ -72,7 +70,7 @@ def _build_broadcast_llm(facts: dict, seconds: int) -> list[dict] | None:
     key_plays = facts.get("key_plays") or []
 
     leader_lines = "\n".join(
-        f"{r['team']} — {r['player']}: {r['stat_line']} ({r['category']})"
+        f"{r['team']} · {r['player']}: {r['stat_line']} ({r['category']})"
         for r in leaders[:8]
     )
     period_line = " | ".join(
@@ -98,24 +96,24 @@ def _build_broadcast_llm(facts: dict, seconds: int) -> list[dict] | None:
 
     system = (
         "You are writing a two-host sports podcast broadcast script. "
-        "These two hosts have been deeply briefed on this specific game — every turn must reference "
+        "These two hosts have been deeply briefed on this specific game. Every turn must reference "
         "actual plays, actual player names, actual stats, and actual periods from the data provided.\n\n"
-        "HOST_PLAY (host='play'): The energetic play-by-play voice. Narrates what happened in real time — "
-        "calls out specific plays, scoring sequences, clutch moments by player name. Excited, fast-paced.\n\n"
-        "HOST_ANALYST (host='analyst'): The tactical expert. Explains *why* things happened — "
+        "HOST_PLAY (host='play'): The energetic play-by-play voice. Narrates what happened in real time, "
+        "calling out specific plays, scoring sequences, clutch moments by player name. Excited, fast-paced.\n\n"
+        "HOST_ANALYST (host='analyst'): The tactical expert. Explains *why* things happened: "
         "matchup exploits, defensive breakdowns, coaching decisions, efficiency numbers. Calm, incisive, specific.\n\n"
         "Rules:\n"
-        "- Ground EVERY line in the actual data — never invent stats, plays, injuries, or quotes.\n"
+        "- Ground EVERY line in the actual data. Never invent stats, plays, injuries, or quotes.\n"
         "- Reference players by full name on first mention, last name after.\n"
-        "- The analyst must always go deeper than the play-by-play — explain causality, not just events.\n"
+        "- The analyst must always go deeper than the play-by-play: explain causality, not just events.\n"
         "- Alternate hosts naturally; avoid two consecutive same-host turns unless dramatically necessary.\n"
         f"- Write exactly {n_turns} turns total.\n\n"
         "SCENE TYPES:\n"
-        "  title   — game overview / setup\n"
-        "  moment  — specific key play or clutch sequence\n"
-        "  stat    — statistical deep-dive or efficiency insight\n"
-        "  run     — scoring run, momentum shift, or quarter recap\n"
-        "  verdict — game conclusion, impact, what it means\n\n"
+        "  title   (game overview / setup)\n"
+        "  moment  (specific key play or clutch sequence)\n"
+        "  stat    (statistical deep-dive or efficiency insight)\n"
+        "  run     (scoring run, momentum shift, or quarter recap)\n"
+        "  verdict (game conclusion, impact, what it means)\n\n"
         "Respond ONLY with a valid JSON array (no markdown fences):\n"
         '[{"host":"play","text":"...","scene_type":"title","duration_hint":8}, ...]\n\n'
         "duration_hint: estimated seconds to speak this line (5-18)"
@@ -123,7 +121,7 @@ def _build_broadcast_llm(facts: dict, seconds: int) -> list[dict] | None:
     prompt = (
         f"Game: {a.get('name')} {as_} at {h.get('name')} {hs} ({facts.get('date','')})\n"
         f"Sport: {facts.get('sport','')}\n"
-        f"Result: {winner} wins — {game_narrative}, margin of {margin}\n"
+        f"Result: {winner} wins ({game_narrative}, margin of {margin})\n"
         f"Lead changes: {lc}\n\n"
         f"Quarter-by-quarter scoring:\n{period_line or 'n/a'}\n\n"
         f"Statistical leaders:\n{leader_lines or 'n/a'}\n\n"
@@ -132,7 +130,48 @@ def _build_broadcast_llm(facts: dict, seconds: int) -> list[dict] | None:
         f"that a die-hard fan would learn something new from. "
         f"The analyst must explain WHY {winner} won with specific tactical observations from the data above."
     )
+    return system, prompt, max_tokens
 
+
+def _clean_turns(raw: str) -> list[dict] | None:
+    """Parse and normalize the model's turn array into the player's DTO shape."""
+    turns = _extract_turns(raw)
+    if not turns:
+        return None
+    cleaned = []
+    for t in turns:
+        if not isinstance(t, dict):
+            continue
+        host = str(t.get("host", "play"))
+        if host not in ("play", "analyst"):
+            host = "play"
+        scene = str(t.get("scene_type", "moment"))
+        if scene not in ("title", "moment", "stat", "run", "verdict"):
+            scene = "moment"
+        cleaned.append({
+            "host": host,
+            "text": str(t.get("text", ""))[:400],
+            "scene_type": scene,
+            "duration_hint": max(4, min(20, int(t.get("duration_hint", 8)))),
+        })
+    return cleaned if cleaned else None
+
+
+def _build_broadcast_trained(facts: dict, seconds: int) -> list[dict] | None:
+    """Primary path: our fine-tuned broadcast writer (Baseten), trained to emit
+    the turns JSON. None when the trained endpoint is unset or fails."""
+    settings = get_settings()
+    system, prompt, max_tokens = _broadcast_prompt(facts, seconds)
+    raw = trained_text(system=system, prompt=prompt, model=settings.broadcast_model, max_tokens=max_tokens)
+    return _clean_turns(raw) if raw else None
+
+
+def _build_broadcast_anthropic(facts: dict, seconds: int) -> list[dict] | None:
+    """Fallback path: the general Anthropic LLM. None when no key or on failure."""
+    settings = get_settings()
+    if not settings.anthropic_api_key:
+        return None
+    system, prompt, max_tokens = _broadcast_prompt(facts, seconds)
     try:
         import anthropic
         client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
@@ -149,28 +188,7 @@ def _build_broadcast_llm(facts: dict, seconds: int) -> list[dict] | None:
                 break
             except Exception as exc:
                 print(f"[broadcast] {model}: {exc}")
-        if not raw:
-            return None
-        turns = _extract_turns(raw)
-        if not turns:
-            return None
-        cleaned = []
-        for t in turns:
-            if not isinstance(t, dict):
-                continue
-            host = str(t.get("host", "play"))
-            if host not in ("play", "analyst"):
-                host = "play"
-            scene = str(t.get("scene_type", "moment"))
-            if scene not in ("title", "moment", "stat", "run", "verdict"):
-                scene = "moment"
-            cleaned.append({
-                "host": host,
-                "text": str(t.get("text", ""))[:400],
-                "scene_type": scene,
-                "duration_hint": max(4, min(20, int(t.get("duration_hint", 8)))),
-            })
-        return cleaned if cleaned else None
+        return _clean_turns(raw) if raw else None
     except Exception as exc:
         print(f"[broadcast] LLM failed: {exc}")
         return None
@@ -189,7 +207,7 @@ def _build_broadcast_fallback(facts: dict, seconds: int) -> list[dict]:
 
     turns: list[dict] = [
         {"host": "play", "text": f"Welcome to the breakdown of {a.get('name')} versus {h.get('name')}. Final score: {aa} {as_}, {ha} {hs}.", "scene_type": "title", "duration_hint": 8},
-        {"host": "analyst", "text": f"{winner.get('name')} wins this one {wsc} to {lsc}. There were {lc} lead change{'s' if lc != 1 else ''} — so this was {'a real back-and-forth' if lc >= 4 else 'a fairly decisive result'}.", "scene_type": "title", "duration_hint": 10},
+        {"host": "analyst", "text": f"{winner.get('name')} wins this one {wsc} to {lsc}. There were {lc} lead change{'s' if lc != 1 else ''}, so this was {'a real back-and-forth' if lc >= 4 else 'a fairly decisive result'}.", "scene_type": "title", "duration_hint": 10},
     ]
     for i, p in enumerate(periods[:4]):
         host = "play" if i % 2 == 0 else "analyst"
@@ -239,11 +257,14 @@ async def generate_broadcast(game_id: int, seconds: int = 300):
         "key_plays": key_plays,
     }
 
+    # Trained writer first, then the general LLM, then the deterministic template.
     with ThreadPoolExecutor(max_workers=1) as ex:
-        llm_fut = ex.submit(_build_broadcast_llm, facts, seconds)
-        turns = llm_fut.result()
-
-    source = "llm"
+        turns = ex.submit(_build_broadcast_trained, facts, seconds).result()
+    source = "trained"
+    if turns is None:
+        with ThreadPoolExecutor(max_workers=1) as ex:
+            turns = ex.submit(_build_broadcast_anthropic, facts, seconds).result()
+        source = "llm"
     if turns is None:
         turns = _build_broadcast_fallback(facts, seconds)
         source = "fallback"

@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from api.espn_public import fetch_espn_athletes
-from middleware.clerk_auth import AuthUser, get_current_user, get_optional_user
+from middleware.identity import AuthUser, get_current_user, get_optional_user
 
 router = APIRouter(prefix="/api/rosters", tags=["fantasy"])
 

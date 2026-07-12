@@ -1,4 +1,33 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import axios from "axios";
+import { apiPath } from "../lib/api";
+
+type Badge = { slug: string; name: string; icon: string };
+
+// Server-owned earned state (points/streak/badges). Zeros when no store is
+// configured or the request fails, so the dashboard never blocks on it.
+async function fetchProfileStats() {
+  const zero = {
+    total_points: 0, login_streak: 0, best_streak: 0,
+    prediction_accuracy: 0, correct_predictions: 0, total_predictions: 0,
+    badges: [] as Badge[], display_name: null as string | null,
+  };
+  try {
+    const { data } = await axios.get(apiPath("/api/users/me"));
+    return {
+      total_points: data.total_points ?? 0,
+      login_streak: data.login_streak ?? 0,
+      best_streak: data.best_streak ?? 0,
+      prediction_accuracy: data.prediction_accuracy ?? 0,
+      correct_predictions: data.correct_predictions ?? 0,
+      total_predictions: data.total_predictions ?? 0,
+      badges: (data.badges ?? []) as Badge[],
+      display_name: (data.display_name ?? null) as string | null,
+    };
+  } catch {
+    return zero;
+  }
+}
 
 export type FavoriteTeam = {
   id: number;
@@ -79,19 +108,24 @@ export function useCurrentUser() {
     queryFn: async () => {
       const localTeams = getLocalFavoriteTeams();
       const localPlayers = getLocalFollowedPlayers();
-      const displayName =
+      const localName =
         (typeof window !== "undefined" && window.localStorage.getItem("replaysai:name")) || null;
+      // Teams/players stay client-side; points/streak/badges come from the store.
+      const stats = await fetchProfileStats();
       return {
         id: "local",
         username: null,
-        display_name: displayName,
+        display_name: stats.display_name || localName,
         email: null,
         avatar_url: null,
         bio: null,
-        total_points: 0,
-        login_streak: 0,
-        prediction_accuracy: 0,
-        badges: [],
+        total_points: stats.total_points,
+        login_streak: stats.login_streak,
+        best_streak: stats.best_streak,
+        prediction_accuracy: stats.prediction_accuracy,
+        correct_predictions: stats.correct_predictions,
+        total_predictions: stats.total_predictions,
+        badges: stats.badges,
         favorite_teams: localTeams,
         followed_players: localPlayers,
         onboarded: localTeams.length > 0,

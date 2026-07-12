@@ -4,7 +4,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.auth import router as auth_router
 from api.broadcast import router as broadcast_router
 from api.chat import router as chat_router
-from api.dream_team import router as dream_team_router
 from api.fantasy import router as fantasy_router
 from api.feed import router as feed_router
 from api.games import router as games_router
@@ -47,7 +46,6 @@ def create_app() -> FastAPI:
     app.include_router(predictions_router)
     app.include_router(personalization_router)
     app.include_router(fantasy_router)
-    app.include_router(dream_team_router)
     app.include_router(leaderboard_router)
     app.include_router(news_router)
     app.include_router(insights_router)

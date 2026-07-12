@@ -4,7 +4,6 @@ import axios from "axios";
 import { apiPath } from "../lib/api";
 import { getLocalFavoriteTeams } from "./useUser";
 
-const PREDICTIONS_KEY = "replaysai:predictions";
 const ROSTERS_KEY = "replaysai:rosters";
 
 function readLocal<T>(key: string, fallback: T): T {
@@ -30,10 +29,11 @@ async function authFetch(getToken: () => Promise<string | null>, url: string, op
 }
 
 export function usePredictions(status?: string) {
+  const { getToken } = useAuth();
   return useQuery({
     queryKey: ["predictions", status],
-    queryFn: () => {
-      const predictions = readLocal<Record<string, unknown>[]>(PREDICTIONS_KEY, []);
+    queryFn: async () => {
+      const predictions = await authFetch(getToken, "/api/predictions") as Record<string, unknown>[];
       if (status === "resolved") return predictions.filter((prediction) => prediction.resolved_at);
       if (status === "pending") return predictions.filter((prediction) => !prediction.resolved_at);
       return predictions;
@@ -45,11 +45,8 @@ export function useUpcomingGames() {
   const { getToken } = useAuth();
   return useQuery({
     queryKey: ["predictions-upcoming"],
-    queryFn: async () => {
-      const games = await authFetch(getToken, "/api/predictions/upcoming");
-      const predicted = new Set(readLocal<{ game_id: number }[]>(PREDICTIONS_KEY, []).map((item) => item.game_id));
-      return games.map((game: { id: number }) => ({ ...game, already_predicted: predicted.has(game.id) }));
-    },
+    // The server marks already_predicted from the fan's stored picks.
+    queryFn: () => authFetch(getToken, "/api/predictions/upcoming"),
     refetchInterval: 60_000,
   });
 }
@@ -58,23 +55,13 @@ export function useCreatePrediction() {
   const { getToken } = useAuth();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (data: { game_id: number; predicted_winner_team_id: number; predicted_score_diff?: number }) => {
-      const predictions = readLocal<Record<string, unknown>[]>(PREDICTIONS_KEY, []);
-      const next = [
-        ...predictions.filter((prediction) => prediction.game_id !== data.game_id),
-        { id: data.game_id, ...data, created_at: new Date().toISOString(), is_correct: null, points_earned: 0 },
-      ];
-      writeLocal(PREDICTIONS_KEY, next);
-      try {
-        await authFetch(getToken, "/api/predictions", { method: "post", data });
-      } catch {
-        // Picks are intentionally local when no database is configured.
-      }
-      return next[next.length - 1];
-    },
+    mutationFn: (data: { game_id: number; predicted_winner_team_id: number; predicted_score_diff?: number }) =>
+      authFetch(getToken, "/api/predictions", { method: "post", data }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["predictions"] });
       qc.invalidateQueries({ queryKey: ["predictions-upcoming"] });
+      qc.invalidateQueries({ queryKey: ["leaderboard"] });
+      qc.invalidateQueries({ queryKey: ["me"] });
     },
   });
 }

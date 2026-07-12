@@ -1,0 +1,6 @@
+# Generated datasets and model artifacts (large). The curation weights are the
+# one artifact that IS committed, and it lives at ../api/curation_weights.json.
+data/
+out/
+*.jsonl
+__pycache__/

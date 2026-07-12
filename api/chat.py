@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from config import get_settings
-from middleware.clerk_auth import AuthUser, get_current_user
+from middleware.identity import AuthUser, get_current_user
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 

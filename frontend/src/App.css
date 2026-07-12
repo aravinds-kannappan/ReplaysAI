@@ -406,7 +406,7 @@
 
 /* Feature spotlight */
 .feature-spotlight {
-  display: grid; grid-template-columns: repeat(3,1fr); gap: 10px;
+  display: grid; grid-template-columns: repeat(2,1fr); gap: 10px;
 }
 .fs-card {
   background: var(--surface2); border: 1px solid var(--border);
@@ -660,8 +660,17 @@
 .notif-item strong { display: block; font-size: 0.86rem; margin-bottom: 3px; }
 .notif-item p { font-size: 0.78rem; color: var(--text-muted); }
 
-/* ── Dream Team ── */
-.page-dream { max-width: 1000px; margin: 0 auto; padding: 32px 24px 80px; }
+/* Real leaderboard / account badges */
+.panel-tag {
+  font-size: 0.72rem; font-weight: 700; color: var(--accent);
+  background: var(--accent-dim); border-radius: 20px; padding: 4px 12px; white-space: nowrap;
+}
+.badge-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.badge-chip {
+  font-size: 0.76rem; font-weight: 600; color: var(--text);
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 20px; padding: 5px 12px;
+}
 
 /* ── Leaderboard ── */
 .page-leaderboard { max-width: 900px; margin: 0 auto; padding: 32px 24px 80px; }

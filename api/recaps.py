@@ -94,6 +94,32 @@ def llm_text(system: str, prompt: str, max_tokens: int = 1500, models: list[str]
     return None
 
 
+def trained_text(system: str, prompt: str, model: str, max_tokens: int = 1500) -> str | None:
+    """One completion from a trained (fine-tuned) model served over an
+    OpenAI-compatible API (Baseten / Orthogonal). Returns None when the trained
+    endpoint is not configured or the call fails, so callers fall back to the
+    general LLM and then to a deterministic template. See training/README.md."""
+    settings = get_settings()
+    if not (settings.trained_base_url and settings.trained_api_key and model):
+        return None
+    try:
+        from openai import OpenAI
+
+        client = OpenAI(api_key=settings.trained_api_key, base_url=settings.trained_base_url)
+        response = client.chat.completions.create(
+            model=model,
+            max_tokens=max_tokens,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt},
+            ],
+        )
+        return (response.choices[0].message.content or "").strip() or None
+    except Exception as exc:
+        print(f"[trained] {model}: {type(exc).__name__}: {str(exc)[:300]}")
+        return None
+
+
 def _period_label(sport: str, period: int) -> str:
     if sport == "NFL" or period <= 4:
         return f"Q{period}"
